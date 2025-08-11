@@ -1,0 +1,43 @@
+http:
+  port: 8081
+
+ipfs:
+  api_addr: "http://127.0.0.1:5001"
+
+rabbitmq:
+  url: "amqp://guest:guest@127.0.0.1:5672/"
+  prefetch: 32
+  pin:
+    exchange: "pin.exchange"
+    queue: "pin.queue"
+    dlx: "pin.dlx"
+    retry_queue: "pin.retry.queue"
+    retry_delay: "30s"
+  unpin:
+    exchange: "unpin.exchange"
+    queue: "unpin.queue"
+    dlx: "unpin.dlx"
+    retry_queue: "unpin.retry.queue"
+    retry_delay: "30s"
+
+workers:
+  pin_concurrency: 8
+  unpin_concurrency: 4
+  max_retries: 3
+
+gc:
+  interval: "30s"
+
+ttl:
+  # 默认 TTL，当没有提供文件大小时使用
+  default: "1h"
+  # 基于大小的 TTL 策略，仅当提供了文件大小时使用
+  table:
+    - max_size: "500K"
+      ttl: "60s"
+    - max_size: "10M"
+      ttl: "45s"
+    - max_size: "100M"
+      ttl: "30s"
+    - max_size: "-1"
+      ttl: "15s"

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ipm;
+option go_package = "github.com/cpucorecore/ipfs_pin_service/internal/model";
+
+message PinRecord {
+    string cid = 1;
+    int32 status = 2;  // Status 枚举
+    int64 received_at = 3;
+    int64 enqueued_at = 4;
+    int64 pin_start_at = 5;
+    int64 pin_succeeded_at = 6;
+    int64 expire_at = 7;
+    int64 schedule_unpin_at = 8;
+    int64 unpin_start_at = 9;
+    int64 unpin_succeeded_at = 10;
+    int64 last_update_at = 11;
+    int64 size_bytes = 12;
+    int32 pin_attempt_count = 13;    // 仅记录重试次数
+    int32 unpin_attempt_count = 14;  // 仅记录重试次数
+}
