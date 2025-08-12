@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
 	"github.com/gin-gonic/gin"
-	"google.golang.org/protobuf/proto"
 )
 
 type Server struct {
@@ -82,13 +82,8 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			return
 		}
 
-		// 入队
-		body, err := proto.Marshal(rec)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
+		// 入队（仅发送请求需要的信息）
+		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -102,11 +97,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	switch store.Status(rec.Status) {
 	case store.StatusActive:
 		// 刷新 TTL（通过 worker 处理）
-		body, err := proto.Marshal(rec)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -119,11 +110,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 
 	default:
 		// 其他状态，重新入队
-		body, err := proto.Marshal(rec)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

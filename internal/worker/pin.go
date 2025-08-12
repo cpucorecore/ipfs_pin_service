@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
@@ -10,8 +11,6 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
-	pb "github.com/cpucorecore/ipfs_pin_service/proto"
-	"google.golang.org/protobuf/proto"
 )
 
 type PinWorker struct {
@@ -42,16 +41,58 @@ func (w *PinWorker) Start(ctx context.Context) error {
 	return w.queue.Dequeue(ctx, w.cfg.RabbitMQ.Pin.Queue, w.handleMessage)
 }
 
+type requestMessage struct {
+	Cid  string `json:"cid"`
+	Size int64  `json:"size"`
+}
+
 func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	log.Printf("Received pin message with body length: %d", len(body))
-	pbRec := &pb.PinRecord{}
-	if err := proto.Unmarshal(body, pbRec); err != nil {
-		log.Printf("Failed to unmarshal record: %v", err)
+	var req requestMessage
+	if err := json.Unmarshal(body, &req); err != nil {
+		log.Printf("Failed to unmarshal request message: %v", err)
 		return err
 	}
-	cid := pbRec.Cid
+	cid := req.Cid
 
-	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	now := time.Now().UnixMilli()
+
+	// Upsert record to ensure existence and size availability
+	rec, err := w.store.Get(ctx, cid)
+	if err != nil {
+		log.Printf("Failed to get record %s: %v", cid, err)
+		return err
+	}
+	if rec == nil {
+		rec = &store.PinRecord{
+			Cid:          cid,
+			Status:       int32(store.StatusReceived),
+			ReceivedAt:   now,
+			LastUpdateAt: now,
+			SizeBytes:    req.Size,
+		}
+		if err := w.store.Put(ctx, rec); err != nil {
+			log.Printf("Failed to upsert record %s: %v", cid, err)
+			return err
+		}
+	} else if req.Size > 0 && rec.SizeBytes != req.Size {
+		if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+			r.SizeBytes = req.Size
+			r.LastUpdateAt = now
+			return nil
+		}); err != nil {
+			log.Printf("Failed to update size for %s: %v", cid, err)
+			return err
+		}
+	}
+
+	// Determine size for TTL
+	size := rec.GetSizeBytes()
+	if req.Size > 0 {
+		size = req.Size
+	}
+
+	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusPinning
 		r.PinStartAt = time.Now().UnixMilli()
 		return nil
@@ -61,7 +102,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	ttl := w.policy.Compute(pbRec.SizeBytes)
+	ttl := w.policy.Compute(size)
 
 	log.Printf("Starting pin operation for CID: %s", cid)
 	if err = w.ipfs.PinAdd(ctx, cid); err != nil {
@@ -70,11 +111,11 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 	log.Printf("Successfully pinned CID: %s", cid)
 
-	now := time.Now()
+	t := time.Now()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
-		r.PinSucceededAt = now.UnixMilli()
-		r.ExpireAt = now.Add(ttl).UnixMilli()
+		r.PinSucceededAt = t.UnixMilli()
+		r.ExpireAt = t.Add(ttl).UnixMilli()
 		return nil
 	})
 	if err != nil {

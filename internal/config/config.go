@@ -25,6 +25,7 @@ type Config struct {
 			RetryQueue string        `yaml:"retry_queue"`
 			RetryDelay time.Duration `yaml:"retry_delay"`
 		} `yaml:"pin"`
+		// Request removed; using pin.exchange for both HTTP and MQ direct requests
 		Unpin struct {
 			Exchange   string        `yaml:"exchange"`
 			Queue      string        `yaml:"queue"`

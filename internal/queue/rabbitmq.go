@@ -173,10 +173,10 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 	}
 
 	return mq.ch.PublishWithContext(ctx,
-		exchange,    // exchange
-		routingKey,  // routing key (queue name)
-		false,       // mandatory
-		false,       // immediate
+		exchange,   // exchange
+		routingKey, // routing key (queue name)
+		false,      // mandatory
+		false,      // immediate
 		amqp.Publishing{
 			ContentType:  "application/octet-stream",
 			Body:         body,
@@ -222,13 +222,13 @@ func (mq *RabbitMQ) Dequeue(ctx context.Context, topic string, handler DeliveryH
 	}
 }
 
-func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (QueueStats, error) {
+func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
 	q, err := mq.ch.QueueInspect(topic)
 	if err != nil {
-		return QueueStats{}, fmt.Errorf("inspect queue: %w", err)
+		return Stats{}, fmt.Errorf("inspect queue: %w", err)
 	}
 
-	return QueueStats{
+	return Stats{
 		Ready:   int64(q.Messages),
 		Unacked: int64(q.Consumers),
 		Total:   int64(q.Messages + q.Consumers),
