@@ -76,7 +76,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	// 更新状态为 Active
 	now := time.Now()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.Status = int32(store.StatusActive)
+		r.Status = store.StatusActive
 		r.PinSucceededAt = now.UnixMilli()
 		r.ExpireAt = now.Add(ttl).UnixMilli()
 		return nil

@@ -68,7 +68,6 @@ func (s *PebbleStore) Put(ctx context.Context, pinRecord *PinRecord) error {
 		return err
 	}
 
-	// 写过期索引（如果有）
 	if pinRecord.ExpireAt > 0 {
 		if err = batch.Set(makeExpireKey(pinRecord.ExpireAt, pinRecord.Cid), nil, nil); err != nil {
 			return err
@@ -128,12 +127,40 @@ func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*PinRec
 }
 
 func (s *PebbleStore) IndexByStatus(ctx context.Context, status Status) (Iterator[string], error) {
-	prefix := []byte(fmt.Sprintf("%s/%d/", prefixStatus, status))
+	prefix := makeStatusPrefix(status)
+	upper := makeStatusPrefix(status + 1)
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
-		UpperBound: append(prefix, 0xFF),
+		UpperBound: upper,
 	})
 	return &pebbleIterator{iter: iter}, nil
+}
+
+func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error) {
+	prefix := []byte(prefixExpire + "/")
+
+	var upperBound bytes.Buffer
+	upperBound.Write(prefix)
+	binary.Write(&upperBound, binary.BigEndian, ts)
+
+	iter, _ := s.db.NewIter(&pebble.IterOptions{
+		LowerBound: prefix,
+		UpperBound: upperBound.Bytes(),
+	})
+	defer iter.Close()
+
+	var cids []string
+	for iter.First(); iter.Valid() && len(cids) < limit; iter.Next() {
+		key := iter.Key()
+		_, cid, err := parseExpireKey(key)
+		if err != nil {
+			return nil, err
+		}
+
+		cids = append(cids, cid)
+	}
+
+	return cids, iter.Error()
 }
 
 func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string) error {
@@ -150,68 +177,6 @@ func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string) error {
 
 func (s *PebbleStore) Close() error {
 	return s.db.Close()
-}
-
-func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error) {
-	prefix := []byte(prefixExpire + "/")
-
-	// 构造上界：将时间戳编码为字节
-	var upperBound bytes.Buffer
-	upperBound.Write(prefix)
-	binary.Write(&upperBound, binary.BigEndian, ts)
-
-	iter, _ := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: prefix,
-		UpperBound: upperBound.Bytes(),
-	})
-	defer iter.Close()
-
-	var cids []string
-	for iter.First(); iter.Valid() && len(cids) < limit; iter.Next() {
-		key := iter.Key()
-		_, expireTs, cid, err := parseExpireKey(key)
-		if err != nil {
-			return nil, err
-		}
-		// 只收集真正过期的记录
-		if expireTs <= ts {
-			cids = append(cids, cid)
-		}
-	}
-	return cids, iter.Error()
-}
-
-func makePinRecordKey(cid string) []byte {
-	return []byte(fmt.Sprintf("%s/%s", prefixPinRecord, cid))
-}
-
-func makeStatusKey(status Status, ts int64, cid string) []byte {
-	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("%s/%02d/", prefixStatus, status))
-	binary.Write(&buf, binary.BigEndian, ts)
-	buf.WriteString("/" + cid)
-	return buf.Bytes()
-}
-
-func makeExpireKey(ts int64, cid string) []byte {
-	var buf bytes.Buffer
-	buf.WriteString(prefixExpire + "/")
-	binary.Write(&buf, binary.BigEndian, ts)
-	buf.WriteString("/" + cid)
-	return buf.Bytes()
-}
-
-// 辅助函数：解析键
-func parseExpireKey(key []byte) (prefix string, ts int64, cid string, err error) {
-	parts := bytes.Split(key, []byte("/"))
-	if len(parts) != 3 {
-		return "", 0, "", fmt.Errorf("invalid expire key format")
-	}
-
-	prefix = string(parts[0])
-	ts = int64(binary.BigEndian.Uint64(parts[1]))
-	cid = string(parts[2])
-	return
 }
 
 // Iterator 实现
