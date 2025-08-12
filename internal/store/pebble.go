@@ -181,10 +181,15 @@ func (s *PebbleStore) Close() error {
 
 // Iterator 实现
 type pebbleIterator struct {
-	iter *pebble.Iterator
+	iter    *pebble.Iterator
+	started bool
 }
 
 func (i *pebbleIterator) Next() bool {
+	if !i.started {
+		i.started = true
+		return i.iter.First()
+	}
 	return i.iter.Next()
 }
 

@@ -51,9 +51,8 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 	cid := pbRec.Cid
 
-	// 更新状态为 Pinning
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.Status = int32(store.StatusPinning)
+		r.Status = store.StatusPinning
 		r.PinStartAt = time.Now().UnixMilli()
 		return nil
 	})
@@ -62,18 +61,15 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	// 计算 TTL（如果没有大小信息，使用默认 TTL）
 	ttl := w.policy.Compute(pbRec.SizeBytes)
 
-	// 执行 pin
 	log.Printf("Starting pin operation for CID: %s", cid)
-	if err := w.ipfs.PinAdd(ctx, cid); err != nil {
+	if err = w.ipfs.PinAdd(ctx, cid); err != nil {
 		log.Printf("Failed to pin CID %s: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
 	log.Printf("Successfully pinned CID: %s", cid)
 
-	// 更新状态为 Active
 	now := time.Now()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
@@ -96,12 +92,11 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) e
 		r.PinAttemptCount++
 
 		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
-			r.Status = int32(store.StatusDeadLetter)
+			r.Status = store.StatusDeadLetter
 			return nil
 		}
 
-		// 重试
-		r.Status = int32(store.StatusPinning)
+		r.Status = store.StatusPinning
 		return nil
 	})
 }
