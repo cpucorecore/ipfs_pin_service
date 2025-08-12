@@ -52,7 +52,7 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 }
 
 func (mq *RabbitMQ) setupTopology() error {
-	// Pin 相关队列
+	// Pin queues
 	if err := mq.setupExchangeAndQueue(
 		mq.cfg.RabbitMQ.Pin.Exchange,
 		mq.cfg.RabbitMQ.Pin.Queue,
@@ -63,7 +63,7 @@ func (mq *RabbitMQ) setupTopology() error {
 		return fmt.Errorf("setup pin queues: %w", err)
 	}
 
-	// Unpin 相关队列
+	// Unpin queues
 	if err := mq.setupExchangeAndQueue(
 		mq.cfg.RabbitMQ.Unpin.Exchange,
 		mq.cfg.RabbitMQ.Unpin.Queue,
@@ -81,7 +81,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 	exchange, queue, dlx, retryQueue string,
 	retryDelay time.Duration,
 ) error {
-	// 声明主交换机
+	// Declare primary exchange
 	if err := mq.ch.ExchangeDeclare(
 		exchange,
 		"direct",
@@ -94,7 +94,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		return fmt.Errorf("declare exchange: %w", err)
 	}
 
-	// 声明死信交换机
+	// Declare DLX
 	if err := mq.ch.ExchangeDeclare(
 		dlx,
 		"direct",
@@ -107,7 +107,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		return fmt.Errorf("declare DLX: %w", err)
 	}
 
-	// 声明主队列
+	// Declare primary queue
 	if _, err := mq.ch.QueueDeclare(
 		queue,
 		true,
@@ -121,7 +121,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		return fmt.Errorf("declare queue: %w", err)
 	}
 
-	// 声明重试队列
+	// Declare retry queue
 	if _, err := mq.ch.QueueDeclare(
 		retryQueue,
 		true,
@@ -136,7 +136,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		return fmt.Errorf("declare retry queue: %w", err)
 	}
 
-	// 绑定队列
+	// Bind queues
 	if err := mq.ch.QueueBind(
 		queue,
 		queue,
@@ -161,7 +161,7 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 }
 
 func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) error {
-	// 使用队列名作为 routing key
+	// Route using queue name
 	routingKey := ""
 	switch exchange {
 	case mq.cfg.RabbitMQ.Pin.Exchange:
@@ -212,7 +212,7 @@ func (mq *RabbitMQ) Dequeue(ctx context.Context, topic string, handler DeliveryH
 
 			err := handler(ctx, msg.Body)
 			if err != nil {
-				// 拒绝消息，让它进入死信队列
+				// Reject to route into DLX
 				msg.Reject(false)
 				continue
 			}

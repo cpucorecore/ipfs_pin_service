@@ -4,7 +4,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 )
 
-// TranslateStatus 将状态码转换为可读字符串
+// TranslateStatus converts the numeric status to a readable string
 func TranslateStatus(status store.Status) string {
 	switch status {
 	case store.StatusActive:

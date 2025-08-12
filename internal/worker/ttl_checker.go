@@ -65,14 +65,14 @@ func (c *TTLChecker) checkExpiredRecords(ctx context.Context) error {
 			continue
 		}
 
-		// 只处理 Active 状态的记录
+		// Only process Active records
 		if store.Status(rec.Status) != store.StatusActive {
 			continue
 		}
 
-		// 更新状态为 ScheduledForUnpin
+		// Mark as ScheduledForUnpin
 		err = c.store.Update(ctx, cid, func(r *store.PinRecord) error {
-			r.Status = int32(store.StatusScheduledForUnpin)
+			r.Status = store.StatusScheduledForUnpin
 			r.ScheduleUnpinAt = now
 			return nil
 		})
@@ -81,7 +81,7 @@ func (c *TTLChecker) checkExpiredRecords(ctx context.Context) error {
 			continue
 		}
 
-		// 入队，只发送 CID
+		// Enqueue only CID to unpin queue
 		if err := c.queue.Enqueue(ctx, c.cfg.RabbitMQ.Unpin.Exchange, []byte(cid)); err != nil {
 			log.Printf("Failed to enqueue record %s: %v", cid, err)
 			continue

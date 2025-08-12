@@ -7,7 +7,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 )
 
-// PinRecordView 定义记录的视图结构
+// PinRecordView is the response view model for a pin record
 type PinRecordView struct {
 	CID               string `json:"cid"`
 	Status            string `json:"status"`
@@ -28,7 +28,7 @@ type PinRecordView struct {
 	Age               string `json:"age"`
 }
 
-// ToPinRecordView 将存储记录转换为视图
+// ToPinRecordView converts a store record to the response view model
 func ToPinRecordView(r *store.PinRecord, timeFormat format.TimeFormat) *PinRecordView {
 	now := time.Now()
 	receivedAt := time.UnixMilli(r.ReceivedAt)

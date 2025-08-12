@@ -31,7 +31,7 @@ type Client struct {
 	sh *shell.Shell
 }
 
-// withRetry 包装一个操作，添加重试逻辑
+// withRetry wraps an operation with retry logic
 func (c *Client) withRetry(ctx context.Context, operation string, fn func() error) error {
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = 2 * time.Minute
@@ -44,7 +44,7 @@ func (c *Client) withRetry(ctx context.Context, operation string, fn func() erro
 		}
 		err := fn()
 		if err != nil {
-			// 检查是否是临时错误
+			// Check for temporary errors
 			if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
 				return err // 可以重试
 			}
@@ -62,7 +62,7 @@ func (c *Client) withRetry(ctx context.Context, operation string, fn func() erro
 }
 
 func NewClient(apiAddr string) *Client {
-	// 设置自定义 HTTP 客户端
+	// Create shell with custom HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -117,7 +117,7 @@ func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
 	var result DagStat
 	var lastErr error
 
-	// 定义一个函数来尝试所有的获取大小的方法
+	// Try multiple endpoints to get DAG size
 	tryAllMethods := func() error {
 		var stat struct {
 			Hash           string `json:"Hash"`
@@ -127,7 +127,7 @@ func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
 			Type           string `json:"Type"`
 		}
 
-		// 首先尝试 files/stat
+		// First try files/stat
 		err := c.sh.Request("files/stat", "/ipfs/"+cid).Exec(ctx, &stat)
 		if err == nil && stat.CumulativeSize > 0 {
 			result = DagStat{Size: stat.CumulativeSize}
@@ -135,7 +135,7 @@ func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
 		}
 		lastErr = err
 
-		// 如果 files/stat 失败，尝试 object/stat
+		// If files/stat fails, try object/stat
 		err = c.sh.Request("object/stat", cid).Exec(ctx, &stat)
 		if err == nil && stat.CumulativeSize > 0 {
 			result = DagStat{Size: stat.CumulativeSize}
@@ -143,7 +143,7 @@ func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
 		}
 		lastErr = err
 
-		// 最后尝试 dag/stat
+		// Finally try dag/stat
 		var dagStat struct {
 			Size int64 `json:"size"`
 		}
@@ -157,7 +157,7 @@ func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
 		return fmt.Errorf("all stat methods failed for cid %s, last error: %w", cid, lastErr)
 	}
 
-	// 使用重试机制执行
+	// Execute with retry
 	err := c.withRetry(ctx, fmt.Sprintf("get stats for %s", cid), tryAllMethods)
 	if err != nil {
 		return DagStat{}, err
@@ -172,7 +172,7 @@ func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
 	err := c.withRetry(ctx, "repo gc", func() error {
 		var totalKeysRemoved int64
 
-		// 使用 Stream 方法来处理流式响应
+		// Use streaming response to read GC results
 		resp, err := c.sh.Request("repo/gc").Send(ctx)
 		if err != nil {
 			return fmt.Errorf("gc request failed: %w", err)

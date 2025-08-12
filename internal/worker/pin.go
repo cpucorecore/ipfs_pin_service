@@ -66,7 +66,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	if rec == nil {
 		rec = &store.PinRecord{
 			Cid:          cid,
-			Status:       int32(store.StatusReceived),
+			Status:       store.StatusReceived,
 			ReceivedAt:   now,
 			LastUpdateAt: now,
 			SizeBytes:    req.Size,

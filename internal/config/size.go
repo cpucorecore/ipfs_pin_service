@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-// FileSize 是一个自定义类型，用于解析带单位的文件大小
+// FileSize is a custom type that parses sizes with units
 type FileSize int64
 
-// UnmarshalYAML 实现 yaml.Unmarshaler 接口
+// UnmarshalYAML implements yaml.Unmarshaler
 func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var str string
 	if err := unmarshal(&str); err != nil {
-		// 如果不是字符串，尝试解析为数字
+		// If not a string, try number
 		var size int64
 		if err := unmarshal(&size); err != nil {
 			return err
@@ -22,7 +22,7 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return nil
 	}
 
-	// 处理特殊值
+	// Handle special values
 	if str == "-1" {
 		*s = FileSize(-1)
 		return nil
@@ -33,13 +33,13 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return fmt.Errorf("empty size string")
 	}
 
-	// 解析数字部分
+	// Extract numeric part
 	var multiplier int64 = 1
 	var numStr string
 
-	// 查找单位
+	// Parse unit suffix
 	switch {
-	// 二进制前缀 (1024)
+	// Binary prefixes (1024)
 	case strings.HasSuffix(str, "KIB"):
 		multiplier = 1024
 		numStr = str[:len(str)-3]
@@ -53,7 +53,7 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		multiplier = 1024 * 1024 * 1024 * 1024
 		numStr = str[:len(str)-3]
 
-	// 十进制前缀 (1000)
+		// Decimal prefixes (1000)
 	case strings.HasSuffix(str, "KB"):
 		multiplier = 1000
 		numStr = str[:len(str)-2]
@@ -67,7 +67,7 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		multiplier = 1000 * 1000 * 1000 * 1000
 		numStr = str[:len(str)-2]
 
-	// 简写形式 (按十进制处理)
+		// Short forms (treated as decimal)
 	case strings.HasSuffix(str, "K"):
 		multiplier = 1000
 		numStr = str[:len(str)-1]
@@ -81,11 +81,11 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		multiplier = 1000 * 1000 * 1000 * 1000
 		numStr = str[:len(str)-1]
 	default:
-		// 没有单位，假设是字节
+		// No unit, assume bytes
 		numStr = str
 	}
 
-	// 解析数字
+	// Parse number
 	num, err := strconv.ParseFloat(numStr, 64)
 	if err != nil {
 		return fmt.Errorf("invalid size format: %s", str)
@@ -95,12 +95,12 @@ func (s *FileSize) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-// Int64 返回字节数
+// Int64 returns byte count
 func (s FileSize) Int64() int64 {
 	return int64(s)
 }
 
-// String 返回人类可读的大小字符串
+// String returns a human-readable size string
 func (s FileSize) String() string {
 	bytes := int64(s)
 	if bytes == -1 {
@@ -118,6 +118,6 @@ func (s FileSize) String() string {
 		exp++
 	}
 
-	// 使用二进制前缀
+	// Use binary prefixes
 	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(div), "KMGT"[exp])
 }

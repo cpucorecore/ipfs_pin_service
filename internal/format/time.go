@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TimeFormat 定义时间格式类型
+// TimeFormat indicates the output time format
 type TimeFormat string
 
 const (
@@ -14,7 +14,7 @@ const (
 	TimeFormatHuman TimeFormat = "human"
 )
 
-// FormatTime 根据指定格式格式化时间
+// FormatTime formats a time using the provided format enum
 func FormatTime(t time.Time, format TimeFormat) string {
 	switch format {
 	case TimeFormatUnix:
@@ -26,7 +26,7 @@ func FormatTime(t time.Time, format TimeFormat) string {
 	}
 }
 
-// FormatDuration 格式化时间间隔为人类可读格式
+// FormatDuration formats a duration into a short human-readable string
 func FormatDuration(d time.Duration) string {
 	if d < time.Second {
 		return "0s"
@@ -49,7 +49,7 @@ func FormatDuration(d time.Duration) string {
 	return parts[0]
 }
 
-// FormatBytes 格式化字节大小为人类可读格式
+// FormatBytes formats bytes as a human-readable string (IEC)
 func FormatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {

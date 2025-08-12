@@ -46,7 +46,6 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
-	// 获取可选的 size 参数
 	sizeStr := c.Query("size")
 	var size int64
 	if sizeStr != "" {
@@ -65,24 +64,23 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	}
 
 	if rec == nil {
-		// 新记录
 		now := time.Now().UnixMilli()
 		rec = &store.PinRecord{
 			Cid:          cid,
-			Status:       int32(store.StatusReceived),
+			Status:       store.StatusReceived,
 			ReceivedAt:   now,
 			LastUpdateAt: now,
 		}
-		// 如果提供了 size，直接设置
+		// If client provided size, persist it
 		if size > 0 {
 			rec.SizeBytes = size
 		}
-		if err := s.store.Put(c, rec); err != nil {
+		if err = s.store.Put(c, rec); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		// 入队（仅发送请求需要的信息）
+		// Enqueue minimal payload (cid, size)
 		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -93,10 +91,10 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
-	// 已存在的记录
+	// Existing record handling
 	switch store.Status(rec.Status) {
 	case store.StatusActive:
-		// 刷新 TTL（通过 worker 处理）
+		// Refresh TTL via worker
 		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -105,11 +103,11 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 
 	case store.StatusPinning:
-		// 已在处理中，直接返回
+		// Already processing; return
 		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 
 	default:
-		// 其他状态，重新入队
+		// Requeue for processing
 		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -126,7 +124,7 @@ func (s *Server) handleGetPin(c *gin.Context) {
 		return
 	}
 
-	// 获取时间格式参数
+	// Parse time_format parameter
 	timeFormat := c.DefaultQuery("time_format", string(view_model.TimeFormatISO))
 	var format view_model.TimeFormat
 	switch timeFormat {

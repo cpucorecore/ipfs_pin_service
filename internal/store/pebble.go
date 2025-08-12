@@ -179,7 +179,7 @@ func (s *PebbleStore) Close() error {
 	return s.db.Close()
 }
 
-// Iterator 实现
+// Iterator implementation
 type pebbleIterator struct {
 	iter    *pebble.Iterator
 	started bool

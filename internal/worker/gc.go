@@ -41,19 +41,19 @@ func (w *GCWorker) Start(ctx context.Context) error {
 }
 
 func (w *GCWorker) runGC(ctx context.Context) error {
-	// 获取 GC 前的状态
+	// Capture repo stats before GC
 	beforeStat, err := w.ipfs.RepoStat(ctx)
 	if err != nil {
 		return err
 	}
 
-	// 执行 GC
+	// Execute GC
 	report, err := w.ipfs.RepoGC(ctx)
 	if err != nil {
 		return err
 	}
 
-	// 获取 GC 后的状态
+	// Capture repo stats after GC
 	afterStat, err := w.ipfs.RepoStat(ctx)
 	if err != nil {
 		return err
