@@ -5,14 +5,12 @@ import (
 	"log"
 	"time"
 
-	pb "github.com/cpucorecore/ipfs_pin_service/proto"
-
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
-	"github.com/cpucorecore/ipfs_pin_service/internal/model"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
+	pb "github.com/cpucorecore/ipfs_pin_service/proto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -51,11 +49,11 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		log.Printf("Failed to unmarshal record: %v", err)
 		return err
 	}
-	rec := &model.PinRecord{PinRecord: pbRec}
+	cid := pbRec.Cid
 
 	// 更新状态为 Pinning
-	err := w.store.Update(ctx, rec.Cid, func(r *model.PinRecord) error {
-		r.Status = int32(model.StatusPinning)
+	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		r.Status = int32(store.StatusPinning)
 		r.PinStartAt = time.Now().UnixMilli()
 		return nil
 	})
@@ -65,20 +63,20 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// 计算 TTL（如果没有大小信息，使用默认 TTL）
-	ttl := w.policy.Compute(rec.SizeBytes)
+	ttl := w.policy.Compute(pbRec.SizeBytes)
 
 	// 执行 pin
-	log.Printf("Starting pin operation for CID: %s", rec.Cid)
-	if err := w.ipfs.PinAdd(ctx, rec.Cid); err != nil {
-		log.Printf("Failed to pin CID %s: %v", rec.Cid, err)
-		return w.handlePinError(ctx, rec, err)
+	log.Printf("Starting pin operation for CID: %s", cid)
+	if err := w.ipfs.PinAdd(ctx, cid); err != nil {
+		log.Printf("Failed to pin CID %s: %v", cid, err)
+		return w.handlePinError(ctx, cid, err)
 	}
-	log.Printf("Successfully pinned CID: %s", rec.Cid)
+	log.Printf("Successfully pinned CID: %s", cid)
 
 	// 更新状态为 Active
 	now := time.Now()
-	err = w.store.Update(ctx, rec.Cid, func(r *model.PinRecord) error {
-		r.Status = int32(model.StatusActive)
+	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		r.Status = int32(store.StatusActive)
 		r.PinSucceededAt = now.UnixMilli()
 		r.ExpireAt = now.Add(ttl).UnixMilli()
 		return nil
@@ -91,19 +89,19 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	return nil
 }
 
-func (w *PinWorker) handlePinError(ctx context.Context, rec *model.PinRecord, err error) error {
-	log.Printf("Pin operation failed for %s: %v", rec.Cid, err)
+func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) error {
+	log.Printf("Pin operation failed for %s: %v", cid, err)
 
-	return w.store.Update(ctx, rec.Cid, func(r *model.PinRecord) error {
+	return w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.PinAttemptCount++
 
 		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
-			r.Status = int32(model.StatusDeadLetter)
+			r.Status = int32(store.StatusDeadLetter)
 			return nil
 		}
 
 		// 重试
-		r.Status = int32(model.StatusQueuedForPin)
+		r.Status = int32(store.StatusPinning)
 		return nil
 	})
 }

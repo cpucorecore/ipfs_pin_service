@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.7
 // 	protoc        v5.29.3
-// source: proto/record.proto
+// source: proto/pin_record.proto
 
 package model
 
@@ -24,7 +24,7 @@ const (
 type PinRecord struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Cid               string                 `protobuf:"bytes,1,opt,name=cid,proto3" json:"cid,omitempty"`
-	Status            int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"` // Status 枚举
+	Status            int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
 	ReceivedAt        int64                  `protobuf:"varint,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
 	EnqueuedAt        int64                  `protobuf:"varint,4,opt,name=enqueued_at,json=enqueuedAt,proto3" json:"enqueued_at,omitempty"`
 	PinStartAt        int64                  `protobuf:"varint,5,opt,name=pin_start_at,json=pinStartAt,proto3" json:"pin_start_at,omitempty"`
@@ -35,15 +35,15 @@ type PinRecord struct {
 	UnpinSucceededAt  int64                  `protobuf:"varint,10,opt,name=unpin_succeeded_at,json=unpinSucceededAt,proto3" json:"unpin_succeeded_at,omitempty"`
 	LastUpdateAt      int64                  `protobuf:"varint,11,opt,name=last_update_at,json=lastUpdateAt,proto3" json:"last_update_at,omitempty"`
 	SizeBytes         int64                  `protobuf:"varint,12,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`       // 仅记录重试次数
-	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"` // 仅记录重试次数
+	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
+	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PinRecord) Reset() {
 	*x = PinRecord{}
-	mi := &file_proto_record_proto_msgTypes[0]
+	mi := &file_proto_pin_record_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -55,7 +55,7 @@ func (x *PinRecord) String() string {
 func (*PinRecord) ProtoMessage() {}
 
 func (x *PinRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_record_proto_msgTypes[0]
+	mi := &file_proto_pin_record_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -68,7 +68,7 @@ func (x *PinRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinRecord.ProtoReflect.Descriptor instead.
 func (*PinRecord) Descriptor() ([]byte, []int) {
-	return file_proto_record_proto_rawDescGZIP(), []int{0}
+	return file_proto_pin_record_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *PinRecord) GetCid() string {
@@ -169,11 +169,11 @@ func (x *PinRecord) GetUnpinAttemptCount() int32 {
 	return 0
 }
 
-var File_proto_record_proto protoreflect.FileDescriptor
+var File_proto_pin_record_proto protoreflect.FileDescriptor
 
-const file_proto_record_proto_rawDesc = "" +
+const file_proto_pin_record_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/record.proto\x12\x03ipm\"\x81\x04\n" +
+	"\x16proto/pin_record.proto\x12\x03ipm\"\x81\x04\n" +
 	"\tPinRecord\x12\x10\n" +
 	"\x03cid\x18\x01 \x01(\tR\x03cid\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x1f\n" +
@@ -196,22 +196,22 @@ const file_proto_record_proto_rawDesc = "" +
 	"\x13unpin_attempt_count\x18\x0e \x01(\x05R\x11unpinAttemptCountB8Z6github.com/cpucorecore/ipfs_pin_service/internal/modelb\x06proto3"
 
 var (
-	file_proto_record_proto_rawDescOnce sync.Once
-	file_proto_record_proto_rawDescData []byte
+	file_proto_pin_record_proto_rawDescOnce sync.Once
+	file_proto_pin_record_proto_rawDescData []byte
 )
 
-func file_proto_record_proto_rawDescGZIP() []byte {
-	file_proto_record_proto_rawDescOnce.Do(func() {
-		file_proto_record_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_record_proto_rawDesc), len(file_proto_record_proto_rawDesc)))
+func file_proto_pin_record_proto_rawDescGZIP() []byte {
+	file_proto_pin_record_proto_rawDescOnce.Do(func() {
+		file_proto_pin_record_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_pin_record_proto_rawDesc), len(file_proto_pin_record_proto_rawDesc)))
 	})
-	return file_proto_record_proto_rawDescData
+	return file_proto_pin_record_proto_rawDescData
 }
 
-var file_proto_record_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_proto_record_proto_goTypes = []any{
+var file_proto_pin_record_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proto_pin_record_proto_goTypes = []any{
 	(*PinRecord)(nil), // 0: ipm.PinRecord
 }
-var file_proto_record_proto_depIdxs = []int32{
+var file_proto_pin_record_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -219,26 +219,26 @@ var file_proto_record_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_proto_record_proto_init() }
-func file_proto_record_proto_init() {
-	if File_proto_record_proto != nil {
+func init() { file_proto_pin_record_proto_init() }
+func file_proto_pin_record_proto_init() {
+	if File_proto_pin_record_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_record_proto_rawDesc), len(file_proto_record_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_pin_record_proto_rawDesc), len(file_proto_pin_record_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_proto_record_proto_goTypes,
-		DependencyIndexes: file_proto_record_proto_depIdxs,
-		MessageInfos:      file_proto_record_proto_msgTypes,
+		GoTypes:           file_proto_pin_record_proto_goTypes,
+		DependencyIndexes: file_proto_pin_record_proto_depIdxs,
+		MessageInfos:      file_proto_pin_record_proto_msgTypes,
 	}.Build()
-	File_proto_record_proto = out.File
-	file_proto_record_proto_goTypes = nil
-	file_proto_record_proto_depIdxs = nil
+	File_proto_pin_record_proto = out.File
+	file_proto_pin_record_proto_goTypes = nil
+	file_proto_pin_record_proto_depIdxs = nil
 }

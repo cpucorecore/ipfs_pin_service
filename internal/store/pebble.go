@@ -4,19 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/cpucorecore/ipfs_pin_service/internal/model"
 	pb "github.com/cpucorecore/ipfs_pin_service/proto"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	// Key 前缀
-	prefixRecord = "p" // pin record
-	prefixStatus = "s" // status index
-	prefixExpire = "e" // expire index
+	prefixPinRecord = "p" // pin record
+	prefixStatus    = "s" // status index
+	prefixExpire    = "e" // expire index
 )
 
 type PebbleStore struct {
@@ -31,51 +30,47 @@ func NewPebbleStore(path string) (*PebbleStore, error) {
 	return &PebbleStore{db: db}, nil
 }
 
-func (s *PebbleStore) Close() error {
-	return s.db.Close()
-}
-
-func (s *PebbleStore) Get(ctx context.Context, cid string) (*model.PinRecord, error) {
-	key := makeRecordKey(cid)
-	value, closer, err := s.db.Get(key)
-	if err == pebble.ErrNotFound {
+func (s *PebbleStore) Get(ctx context.Context, cid string) (*PinRecord, error) {
+	key := makePinRecordKey(cid)
+	bytes, closer, err := s.db.Get(key)
+	if errors.Is(err, pebble.ErrNotFound) {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	defer closer.Close()
 
-	pbRec := &pb.PinRecord{}
-	if err := proto.Unmarshal(value, pbRec); err != nil {
+	pinRecord := &pb.PinRecord{}
+	if err = proto.Unmarshal(bytes, pinRecord); err != nil {
 		return nil, err
 	}
-	return &model.PinRecord{PinRecord: pbRec}, nil
+
+	return pinRecord, nil
 }
 
-func (s *PebbleStore) Put(ctx context.Context, rec *model.PinRecord) error {
+func (s *PebbleStore) Put(ctx context.Context, pinRecord *PinRecord) error {
 	batch := s.db.NewBatch()
 	defer batch.Close()
 
-	// 序列化记录
-	value, err := proto.Marshal(rec)
+	bytes, err := proto.Marshal(pinRecord)
 	if err != nil {
 		return err
 	}
 
-	// 写主记录
-	if err := batch.Set(makeRecordKey(rec.Cid), value, nil); err != nil {
+	if err = batch.Set(makePinRecordKey(pinRecord.Cid), bytes, nil); err != nil {
 		return err
 	}
 
-	// 写状态索引
-	if err := batch.Set(makeStatusKey(model.Status(rec.Status), rec.LastUpdateAt, rec.Cid), nil, nil); err != nil {
+	if err = batch.Set(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, pinRecord.Cid), nil, nil); err != nil {
 		return err
 	}
 
 	// 写过期索引（如果有）
-	if rec.ExpireAt > 0 {
-		if err := batch.Set(makeExpireKey(rec.ExpireAt, rec.Cid), nil, nil); err != nil {
+	if pinRecord.ExpireAt > 0 {
+		if err = batch.Set(makeExpireKey(pinRecord.ExpireAt, pinRecord.Cid), nil, nil); err != nil {
 			return err
 		}
 	}
@@ -83,50 +78,48 @@ func (s *PebbleStore) Put(ctx context.Context, rec *model.PinRecord) error {
 	return batch.Commit(pebble.Sync)
 }
 
-func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*model.PinRecord) error) error {
-	// 获取当前记录
-	rec, err := s.Get(ctx, cid)
+func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*PinRecord) error) error {
+	pinRecord, err := s.Get(ctx, cid)
 	if err != nil {
 		return err
 	}
-	if rec == nil {
+
+	if pinRecord == nil {
 		return fmt.Errorf("record not found: %s", cid)
 	}
 
-	// 删除旧索引
 	batch := s.db.NewBatch()
 	defer batch.Close()
 
-	if err := batch.Delete(makeStatusKey(model.Status(rec.Status), rec.LastUpdateAt, cid), nil); err != nil {
+	if err = batch.Delete(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, cid), nil); err != nil {
 		return err
 	}
-	if rec.ExpireAt > 0 {
-		if err := batch.Delete(makeExpireKey(rec.ExpireAt, cid), nil); err != nil {
+
+	if pinRecord.ExpireAt > 0 {
+		if err = batch.Delete(makeExpireKey(pinRecord.ExpireAt, cid), nil); err != nil {
 			return err
 		}
 	}
 
-	// 应用更新
-	if err := apply(rec); err != nil {
+	if err = apply(pinRecord); err != nil {
 		return err
 	}
 
-	// 序列化并写入新记录
-	value, err := proto.Marshal(rec)
+	bytes, err := proto.Marshal(pinRecord)
 	if err != nil {
 		return err
 	}
 
-	if err := batch.Set(makeRecordKey(cid), value, nil); err != nil {
+	if err = batch.Set(makePinRecordKey(cid), bytes, nil); err != nil {
 		return err
 	}
 
-	// 写入新索引
-	if err := batch.Set(makeStatusKey(model.Status(rec.Status), rec.LastUpdateAt, cid), nil, nil); err != nil {
+	if err = batch.Set(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, cid), nil, nil); err != nil {
 		return err
 	}
-	if rec.ExpireAt > 0 {
-		if err := batch.Set(makeExpireKey(rec.ExpireAt, cid), nil, nil); err != nil {
+
+	if pinRecord.ExpireAt > 0 {
+		if err = batch.Set(makeExpireKey(pinRecord.ExpireAt, cid), nil, nil); err != nil {
 			return err
 		}
 	}
@@ -134,7 +127,7 @@ func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*model.
 	return batch.Commit(pebble.Sync)
 }
 
-func (s *PebbleStore) IndexByStatus(ctx context.Context, status model.Status) (Iterator[string], error) {
+func (s *PebbleStore) IndexByStatus(ctx context.Context, status Status) (Iterator[string], error) {
 	prefix := []byte(fmt.Sprintf("%s/%d/", prefixStatus, status))
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
@@ -143,34 +136,58 @@ func (s *PebbleStore) IndexByStatus(ctx context.Context, status model.Status) (I
 	return &pebbleIterator{iter: iter}, nil
 }
 
+func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string) error {
+	rec, err := s.Get(ctx, cid)
+	if err != nil {
+		return err
+	}
+	if rec == nil || rec.ExpireAt == 0 {
+		return nil
+	}
+
+	return s.db.Delete(makeExpireKey(rec.ExpireAt, cid), pebble.Sync)
+}
+
+func (s *PebbleStore) Close() error {
+	return s.db.Close()
+}
+
 func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error) {
 	prefix := []byte(prefixExpire + "/")
+
+	// 构造上界：将时间戳编码为字节
+	var upperBound bytes.Buffer
+	upperBound.Write(prefix)
+	binary.Write(&upperBound, binary.BigEndian, ts)
+
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
-		UpperBound: append(prefix, byte(ts>>56)),
+		UpperBound: upperBound.Bytes(),
 	})
 	defer iter.Close()
 
 	var cids []string
 	for iter.First(); iter.Valid() && len(cids) < limit; iter.Next() {
 		key := iter.Key()
-		_, _, cid, err := parseExpireKey(key)
+		_, expireTs, cid, err := parseExpireKey(key)
 		if err != nil {
 			return nil, err
 		}
-		cids = append(cids, cid)
+		// 只收集真正过期的记录
+		if expireTs <= ts {
+			cids = append(cids, cid)
+		}
 	}
 	return cids, iter.Error()
 }
 
-// 辅助函数：构造键
-func makeRecordKey(cid string) []byte {
-	return []byte(fmt.Sprintf("%s/%s", prefixRecord, cid))
+func makePinRecordKey(cid string) []byte {
+	return []byte(fmt.Sprintf("%s/%s", prefixPinRecord, cid))
 }
 
-func makeStatusKey(status model.Status, ts int64, cid string) []byte {
+func makeStatusKey(status Status, ts int64, cid string) []byte {
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("%s/%d/", prefixStatus, status))
+	buf.WriteString(fmt.Sprintf("%s/%02d/", prefixStatus, status))
 	binary.Write(&buf, binary.BigEndian, ts)
 	buf.WriteString("/" + cid)
 	return buf.Bytes()

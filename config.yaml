@@ -26,12 +26,14 @@ workers:
   max_retries: 3
 
 gc:
-  interval: "30s"
+  interval: "1h"
+
+ttl_checker:
+  interval: "5s"
+  batch_size: 100
 
 ttl:
-  # 默认 TTL，当没有提供文件大小时使用
-  default: "1h"
-  # 基于大小的 TTL 策略，仅当提供了文件大小时使用
+  default: "1m"
   table:
     - max_size: "500K"
       ttl: "60s"

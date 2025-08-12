@@ -4,8 +4,10 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/model"
+	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/proto"
 )
@@ -16,9 +18,9 @@ type Server struct {
 }
 
 type Store interface {
-	Get(ctx context.Context, cid string) (*model.PinRecord, error)
-	Put(ctx context.Context, rec *model.PinRecord) error
-	Update(ctx context.Context, cid string, apply func(*model.PinRecord) error) error
+	Get(ctx context.Context, cid string) (*store.PinRecord, error)
+	Put(ctx context.Context, rec *store.PinRecord) error
+	Update(ctx context.Context, cid string, apply func(*store.PinRecord) error) error
 }
 
 type MessageQueue interface {
@@ -64,7 +66,13 @@ func (s *Server) handlePutPin(c *gin.Context) {
 
 	if rec == nil {
 		// 新记录
-		rec = model.NewPinRecord(cid)
+		now := time.Now().UnixMilli()
+		rec = &store.PinRecord{
+			Cid:          cid,
+			Status:       int32(store.StatusReceived),
+			ReceivedAt:   now,
+			LastUpdateAt: now,
+		}
 		// 如果提供了 size，直接设置
 		if size > 0 {
 			rec.SizeBytes = size
@@ -86,13 +94,13 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			return
 		}
 
-		c.JSON(http.StatusAccepted, rec.ToView(model.TimeStyleISO))
+		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 		return
 	}
 
 	// 已存在的记录
-	switch model.Status(rec.Status) {
-	case model.StatusActive:
+	switch store.Status(rec.Status) {
+	case store.StatusActive:
 		// 刷新 TTL（通过 worker 处理）
 		body, err := proto.Marshal(rec)
 		if err != nil {
@@ -103,11 +111,11 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusAccepted, rec.ToView(model.TimeStyleISO))
+		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 
-	case model.StatusQueuedForPin, model.StatusPinning:
-		// 已在队列或处理中，直接返回
-		c.JSON(http.StatusAccepted, rec.ToView(model.TimeStyleISO))
+	case store.StatusPinning:
+		// 已在处理中，直接返回
+		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 
 	default:
 		// 其他状态，重新入队
@@ -120,7 +128,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusAccepted, rec.ToView(model.TimeStyleISO))
+		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 	}
 }
 
@@ -132,15 +140,15 @@ func (s *Server) handleGetPin(c *gin.Context) {
 	}
 
 	// 获取时间格式参数
-	timeStyle := c.DefaultQuery("time_style", string(model.TimeStyleISO))
-	var style model.TimeStyle
-	switch timeStyle {
-	case string(model.TimeStyleUnix):
-		style = model.TimeStyleUnix
-	case string(model.TimeStyleHuman):
-		style = model.TimeStyleHuman
+	timeFormat := c.DefaultQuery("time_format", string(view_model.TimeFormatISO))
+	var format view_model.TimeFormat
+	switch timeFormat {
+	case string(view_model.TimeFormatUnix):
+		format = view_model.TimeFormatUnix
+	case string(view_model.TimeFormatHuman):
+		format = view_model.TimeFormatHuman
 	default:
-		style = model.TimeStyleISO
+		format = view_model.TimeFormatISO
 	}
 
 	rec, err := s.store.Get(c, cid)
@@ -154,5 +162,5 @@ func (s *Server) handleGetPin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, rec.ToView(style))
+	c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, format))
 }

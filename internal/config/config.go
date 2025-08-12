@@ -44,6 +44,11 @@ type Config struct {
 		Interval time.Duration `yaml:"interval"`
 	} `yaml:"gc"`
 
+	TTLChecker struct {
+		Interval  time.Duration `yaml:"interval"`   // TTL 检查间隔
+		BatchSize int           `yaml:"batch_size"` // 每次检查的记录数量
+	} `yaml:"ttl_checker"`
+
 	TTL struct {
 		Default time.Duration `yaml:"default"`
 		Table   []struct {

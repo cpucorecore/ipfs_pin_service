@@ -5,7 +5,7 @@ option go_package = "github.com/cpucorecore/ipfs_pin_service/internal/model";
 
 message PinRecord {
     string cid = 1;
-    int32 status = 2;  // Status 枚举
+    int32 status = 2;
     int64 received_at = 3;
     int64 enqueued_at = 4;
     int64 pin_start_at = 5;
@@ -16,6 +16,6 @@ message PinRecord {
     int64 unpin_succeeded_at = 10;
     int64 last_update_at = 11;
     int64 size_bytes = 12;
-    int32 pin_attempt_count = 13;    // 仅记录重试次数
-    int32 unpin_attempt_count = 14;  // 仅记录重试次数
+    int32 pin_attempt_count = 13;
+    int32 unpin_attempt_count = 14;
 }
