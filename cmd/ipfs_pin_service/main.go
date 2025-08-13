@@ -46,7 +46,7 @@ func main() {
 	defer mq.Close()
 
 	// 创建 IPFS 客户端
-	ipfsClient := ipfs.NewClient(cfg.IPFS.APIAddr)
+	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
 
 	// 创建 TTL 策略
 	policy := ttl.NewPolicy(cfg)

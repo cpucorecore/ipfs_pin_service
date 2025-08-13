@@ -49,10 +49,6 @@ type requestMessage struct {
 	Size int64  `json:"size"`
 }
 
-var (
-	ErrWrongCid = errors.New("wrong cid")
-)
-
 func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	log.Printf("Received pin message with body length: %d", len(body))
 	var req requestMessage
@@ -118,8 +114,15 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	ttl, bucket := w.policy.ComputeWithBucket(size)
 
 	log.Printf("Starting pin operation for CID: %s", cid)
+	// Add per-operation timeout if configured
+	ctxPin := ctx
+	var cancel context.CancelFunc
+	if w.cfg.Workers.PinTimeout > 0 {
+		ctxPin, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
+		defer cancel()
+	}
 	start := time.Now()
-	err = w.ipfs.PinAdd(ctx, cid)
+	err = w.ipfs.PinAdd(ctxPin, cid)
 	monitor.ObserveOperation(monitor.OpPinAdd, time.Since(start), err)
 	if err != nil {
 		log.Printf("Failed to pin CID %s: %v", cid, err)

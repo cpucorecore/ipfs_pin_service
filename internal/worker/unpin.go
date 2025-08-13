@@ -59,8 +59,15 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Execute unpin
+	// Add per-operation timeout if configured
+	ctxUnpin := ctx
+	var cancel context.CancelFunc
+	if w.cfg.Workers.UnpinTimeout > 0 {
+		ctxUnpin, cancel = context.WithTimeout(ctx, w.cfg.Workers.UnpinTimeout)
+		defer cancel()
+	}
 	start := time.Now()
-	err = w.ipfs.PinRm(ctx, cid)
+	err = w.ipfs.PinRm(ctxUnpin, cid)
 	monitor.ObserveOperation(monitor.OpPinRm, time.Since(start), err)
 	if err != nil {
 		if err.Error() == "pin/rm: not pinned or pinned indirectly" {

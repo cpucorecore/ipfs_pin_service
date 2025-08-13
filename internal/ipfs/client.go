@@ -10,6 +10,8 @@ import (
 	ipfspath "github.com/ipfs/boxo/path"
 	ipfscid "github.com/ipfs/go-cid"
 	"github.com/ipfs/kubo/client/rpc"
+
+	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 )
 
 type RepoStat struct {
@@ -24,12 +26,22 @@ type Client struct {
 	ipfsCli *rpc.HttpApi
 }
 
-func NewClient(url string) *Client {
+func NewClientWithConfig(url string, cfg *config.Config) *Client {
+	dialTimeout := 30 * time.Second
+	if cfg != nil && cfg.IPFS.DialTimeout > 0 {
+		dialTimeout = cfg.IPFS.DialTimeout
+	}
+
+	httpTimeout := 30 * time.Second
+	if cfg != nil && cfg.IPFS.HTTPTimeout > 0 {
+		httpTimeout = cfg.IPFS.HTTPTimeout
+	}
+
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
+				Timeout:   dialTimeout,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
@@ -38,7 +50,7 @@ func NewClient(url string) *Client {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
-		Timeout: 30 * time.Second,
+		Timeout: httpTimeout,
 	}
 
 	ipfsCli, err := rpc.NewURLApiWithClient(url, httpClient)

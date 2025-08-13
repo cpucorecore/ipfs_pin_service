@@ -12,7 +12,9 @@ type Config struct {
 		Port int `yaml:"port"`
 	} `yaml:"http"`
 	IPFS struct {
-		APIAddr string `yaml:"api_addr"`
+		APIAddr     string        `yaml:"api_addr"`
+		HTTPTimeout time.Duration `yaml:"http_timeout"`
+		DialTimeout time.Duration `yaml:"dial_timeout"`
 	} `yaml:"ipfs"`
 
 	RabbitMQ struct {
@@ -36,9 +38,11 @@ type Config struct {
 	} `yaml:"rabbitmq"`
 
 	Workers struct {
-		PinConcurrency   int `yaml:"pin_concurrency"`
-		UnpinConcurrency int `yaml:"unpin_concurrency"`
-		MaxRetries       int `yaml:"max_retries"`
+		PinConcurrency   int           `yaml:"pin_concurrency"`
+		UnpinConcurrency int           `yaml:"unpin_concurrency"`
+		MaxRetries       int           `yaml:"max_retries"`
+		PinTimeout       time.Duration `yaml:"pin_timeout"`
+		UnpinTimeout     time.Duration `yaml:"unpin_timeout"`
 	} `yaml:"workers"`
 
 	GC struct {

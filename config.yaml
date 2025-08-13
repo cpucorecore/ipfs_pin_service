@@ -3,6 +3,8 @@ http:
 
 ipfs:
   api_addr: "http://127.0.0.1:5001"
+  http_timeout: "30m"     # 单个HTTP请求超时
+  dial_timeout: "60s"     # 建连超时
 
 rabbitmq:
   url: "amqp://guest:guest@127.0.0.1:5672/"
@@ -12,34 +14,36 @@ rabbitmq:
     queue: "pin.queue"
     dlx: "pin.dlx"
     retry_queue: "pin.retry.queue"
-    retry_delay: "30s"
+    retry_delay: "1s"
   unpin:
     exchange: "unpin.exchange"
     queue: "unpin.queue"
     dlx: "unpin.dlx"
     retry_queue: "unpin.retry.queue"
-    retry_delay: "30s"
+    retry_delay: "1s"
 
 workers:
   pin_concurrency: 8
   unpin_concurrency: 4
-  max_retries: 3
+  max_retries: 30
+  pin_timeout: "30m"      # 单次pin操作超时（覆盖http_timeout更大场景）
+  unpin_timeout: "5m"     # 单次unpin操作超时
 
 gc:
-  interval: "10s"
+  interval: "1h"
 
 ttl_checker:
-  interval: "5s"
+  interval: "1m"
   batch_size: 100
 
 ttl:
-  default: "1m"
+  default: "1h"
   table:
     - max_size: "500K"
-      ttl: "60s"
+      ttl: "60m"
     - max_size: "10M"
-      ttl: "45s"
+      ttl: "45m"
     - max_size: "100M"
-      ttl: "30s"
+      ttl: "30m"
     - max_size: "-1"
-      ttl: "15s"
+      ttl: "15m"
