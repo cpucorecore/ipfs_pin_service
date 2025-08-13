@@ -48,8 +48,7 @@ func (w *GCWorker) runGC(ctx context.Context) error {
 	}
 
 	// Execute GC
-	report, err := w.ipfs.RepoGC(ctx)
-	if err != nil {
+	if err := w.ipfs.RepoGC(ctx); err != nil {
 		return err
 	}
 
@@ -59,8 +58,7 @@ func (w *GCWorker) runGC(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("GC completed: removed %d keys, freed %d bytes",
-		report.KeysRemoved,
+	log.Printf("GC completed: freed %d bytes",
 		beforeStat.RepoSize-afterStat.RepoSize)
 
 	return nil
