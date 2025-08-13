@@ -2,7 +2,9 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,60 +85,30 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 	exchange, queue, dlx, retryQueue string,
 	retryDelay time.Duration,
 ) error {
-	// Declare primary exchange
-	if err := mq.ch.ExchangeDeclare(
-		exchange,
-		"direct",
-		true,  // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil,   // arguments
-	); err != nil {
+	// Declare primary exchange (with recovery)
+	if err := mq.declareExchangeWithRecovery(exchange, "direct", true); err != nil {
 		return fmt.Errorf("declare exchange: %w", err)
 	}
 
-	// Declare DLX
-	if err := mq.ch.ExchangeDeclare(
-		dlx,
-		"direct",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	); err != nil {
+	// Declare DLX (with recovery)
+	if err := mq.declareExchangeWithRecovery(dlx, "direct", true); err != nil {
 		return fmt.Errorf("declare DLX: %w", err)
 	}
 
-	// Declare primary queue
-	if _, err := mq.ch.QueueDeclare(
-		queue,
-		true,
-		false,
-		false,
-		false,
-		amqp.Table{
-			"x-dead-letter-exchange":    dlx,
-			"x-dead-letter-routing-key": retryQueue, // route errors to retry queue via DLX
-		},
-	); err != nil {
+	// Declare primary queue (with recovery)
+	if err := mq.declareQueueWithRecovery(queue, amqp.Table{
+		"x-dead-letter-exchange":    dlx,
+		"x-dead-letter-routing-key": retryQueue, // route errors to retry queue via DLX
+	}); err != nil {
 		return fmt.Errorf("declare queue: %w", err)
 	}
 
-	// Declare retry queue
-	if _, err := mq.ch.QueueDeclare(
-		retryQueue,
-		true,
-		false,
-		false,
-		false,
-		amqp.Table{
-			"x-dead-letter-exchange":    exchange, // after TTL, route back to primary exchange
-			"x-dead-letter-routing-key": queue,    // using primary queue as routing key
-			"x-message-ttl":             int64(retryDelay.Milliseconds()),
-		},
-	); err != nil {
+	// Declare retry queue (with recovery)
+	if err := mq.declareQueueWithRecovery(retryQueue, amqp.Table{
+		"x-dead-letter-exchange":    exchange, // after TTL, route back to primary exchange
+		"x-dead-letter-routing-key": queue,    // using primary queue as routing key
+		"x-message-ttl":             int64(retryDelay.Milliseconds()),
+	}); err != nil {
 		return fmt.Errorf("declare retry queue: %w", err)
 	}
 
@@ -162,6 +134,63 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 	}
 
 	return nil
+}
+
+// declareExchangeWithRecovery tries to declare an exchange and, on PRECONDITION_FAILED,
+// deletes and re-creates it with the new parameters.
+func (mq *RabbitMQ) declareExchangeWithRecovery(name, kind string, durable bool) error {
+	err := mq.ch.ExchangeDeclare(
+		name,
+		kind,
+		durable,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err == nil {
+		return nil
+	}
+	if isPreconditionFailed(err) {
+		// attempt delete then recreate
+		_ = mq.ch.ExchangeDelete(name, false, false)
+		return mq.ch.ExchangeDeclare(name, kind, durable, false, false, false, nil)
+	}
+	return err
+}
+
+// declareQueueWithRecovery tries to declare a queue and, on PRECONDITION_FAILED,
+// deletes and re-creates it so parameter changes (like TTL) take effect.
+func (mq *RabbitMQ) declareQueueWithRecovery(name string, args amqp.Table) error {
+	_, err := mq.ch.QueueDeclare(
+		name,
+		true,
+		false,
+		false,
+		false,
+		args,
+	)
+	if err == nil {
+		return nil
+	}
+	if isPreconditionFailed(err) {
+		// attempt delete then recreate
+		_, _ = mq.ch.QueueDelete(name, false, false, false)
+		_, err = mq.ch.QueueDeclare(name, true, false, false, false, args)
+		return err
+	}
+	return err
+}
+
+func isPreconditionFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	var amqErr *amqp.Error
+	if errors.As(err, &amqErr) {
+		return amqErr.Code == 406
+	}
+	return strings.Contains(strings.ToUpper(err.Error()), "PRECONDITION_FAILED") || strings.Contains(err.Error(), "406")
 }
 
 func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) error {
