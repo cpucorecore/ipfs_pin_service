@@ -26,7 +26,7 @@ workers:
   max_retries: 3
 
 gc:
-  interval: "1h"
+  interval: "1m"
 
 ttl_checker:
   interval: "5s"
