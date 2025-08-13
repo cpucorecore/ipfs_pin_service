@@ -51,9 +51,9 @@ func NewClient(url string) *Client {
 }
 
 func getCidPath(cidStr string) ipfspath.Path {
-	cid, err := ipfscid.Parse(cidStr)
+	cid, err := ipfscid.Decode(cidStr)
 	if err != nil {
-		log.Fatal(err) // TODO check
+		log.Fatal(err) // already precheck request
 	}
 	return ipfspath.FromCid(cid)
 }

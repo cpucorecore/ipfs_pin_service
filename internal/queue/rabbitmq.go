@@ -43,7 +43,7 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 		closeChan: make(chan struct{}),
 	}
 
-	if err := mq.setupTopology(); err != nil {
+	if err = mq.setupTopology(); err != nil {
 		mq.Close()
 		return nil, fmt.Errorf("setup topology: %w", err)
 	}
@@ -210,7 +210,7 @@ func (mq *RabbitMQ) Dequeue(ctx context.Context, topic string, handler DeliveryH
 				return fmt.Errorf("channel closed")
 			}
 
-			err := handler(ctx, msg.Body)
+			err = handler(ctx, msg.Body)
 			if err != nil {
 				// Reject to route into DLX
 				msg.Reject(false)

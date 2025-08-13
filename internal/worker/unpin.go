@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"log"
 	"time"
 
@@ -39,6 +40,11 @@ func (w *UnpinWorker) Start(ctx context.Context) error {
 func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	cid := string(body)
 
+	if !util.CheckCid(cid) {
+		log.Printf("Warning: wrong unpin cid: %s", cid)
+		return nil
+	}
+
 	// Mark as Unpinning
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinning
@@ -51,7 +57,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Execute unpin
-	if err := w.ipfs.PinRm(ctx, cid); err != nil {
+	if err = w.ipfs.PinRm(ctx, cid); err != nil {
 		if err.Error() == "pin/rm: not pinned or pinned indirectly" {
 			// Not pinned already; treat as success
 			log.Printf("CID %s is already unpinned", cid)
@@ -88,7 +94,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Delete expire index entry
-	if err := w.store.DeleteExpireIndex(ctx, cid); err != nil {
+	if err = w.store.DeleteExpireIndex(ctx, cid); err != nil {
 		log.Printf("Failed to delete expire index for %s: %v", cid, err)
 		// Log only; main action succeeded
 	}

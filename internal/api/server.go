@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
 	"github.com/gin-gonic/gin"
 )
@@ -40,10 +41,14 @@ func (s *Server) Routes(r *gin.Engine) {
 }
 
 func (s *Server) handlePutPin(c *gin.Context) {
-	cid := c.Param("cid")
-	if cid == "" {
+	cidStr := c.Param("cid")
+	if cidStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
 		return
+	}
+
+	if !util.CheckCid(cidStr) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
 	}
 
 	sizeStr := c.Query("size")
@@ -57,7 +62,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 	}
 
-	rec, err := s.store.Get(c, cid)
+	rec, err := s.store.Get(c, cidStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -66,7 +71,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	if rec == nil {
 		now := time.Now().UnixMilli()
 		rec = &store.PinRecord{
-			Cid:          cid,
+			Cid:          cidStr,
 			Status:       store.StatusReceived,
 			ReceivedAt:   now,
 			LastUpdateAt: now,
@@ -81,7 +86,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 
 		// Enqueue minimal payload (cid, size)
-		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
+		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -95,7 +100,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	switch store.Status(rec.Status) {
 	case store.StatusActive:
 		// Refresh TTL via worker
-		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
+		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -108,7 +113,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 
 	default:
 		// Requeue for processing
-		body, _ := json.Marshal(gin.H{"cid": cid, "size": rec.SizeBytes})
+		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
 		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -118,10 +123,14 @@ func (s *Server) handlePutPin(c *gin.Context) {
 }
 
 func (s *Server) handleGetPin(c *gin.Context) {
-	cid := c.Param("cid")
-	if cid == "" {
+	cidStr := c.Param("cid")
+	if cidStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
 		return
+	}
+
+	if !util.CheckCid(cidStr) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
 	}
 
 	// Parse time_format parameter
@@ -136,7 +145,7 @@ func (s *Server) handleGetPin(c *gin.Context) {
 		format = view_model.TimeFormatISO
 	}
 
-	rec, err := s.store.Get(c, cid)
+	rec, err := s.store.Get(c, cidStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"log"
 	"time"
 
@@ -46,6 +48,10 @@ type requestMessage struct {
 	Size int64  `json:"size"`
 }
 
+var (
+	ErrWrongCid = errors.New("wrong cid")
+)
+
 func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	log.Printf("Received pin message with body length: %d", len(body))
 	var req requestMessage
@@ -53,6 +59,12 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		log.Printf("Failed to unmarshal request message: %v", err)
 		return err
 	}
+
+	if !util.CheckCid(req.Cid) {
+		log.Printf("Warning: wrong pin cid: %s", req.Cid)
+		return nil
+	}
+
 	cid := req.Cid
 
 	now := time.Now().UnixMilli()
