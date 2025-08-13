@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -115,7 +117,8 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		false,
 		false,
 		amqp.Table{
-			"x-dead-letter-exchange": dlx,
+			"x-dead-letter-exchange":    dlx,
+			"x-dead-letter-routing-key": retryQueue, // route errors to retry queue via DLX
 		},
 	); err != nil {
 		return fmt.Errorf("declare queue: %w", err)
@@ -129,8 +132,9 @@ func (mq *RabbitMQ) setupExchangeAndQueue(
 		false,
 		false,
 		amqp.Table{
-			"x-dead-letter-exchange": exchange,
-			"x-message-ttl":          int64(retryDelay.Milliseconds()),
+			"x-dead-letter-exchange":    exchange, // after TTL, route back to primary exchange
+			"x-dead-letter-routing-key": queue,    // using primary queue as routing key
+			"x-message-ttl":             int64(retryDelay.Milliseconds()),
 		},
 	); err != nil {
 		return fmt.Errorf("declare retry queue: %w", err)
@@ -220,6 +224,62 @@ func (mq *RabbitMQ) Dequeue(ctx context.Context, topic string, handler DeliveryH
 			msg.Ack(false)
 		}
 	}
+}
+
+// DequeueConcurrent starts `concurrency` independent consumers on the same queue.
+// Each consumer uses its own channel (AMQP channels are not goroutine-safe).
+func (mq *RabbitMQ) DequeueConcurrent(ctx context.Context, topic string, concurrency int, handler DeliveryHandler) error {
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		g.Go(func() error {
+			ch, err := mq.conn.Channel()
+			if err != nil {
+				return fmt.Errorf("create channel: %w", err)
+			}
+			defer ch.Close()
+
+			if err := ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+				return fmt.Errorf("set QoS: %w", err)
+			}
+
+			msgs, err := ch.Consume(
+				topic,
+				"",
+				false,
+				false,
+				false,
+				false,
+				nil,
+			)
+			if err != nil {
+				return fmt.Errorf("start consuming: %w", err)
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-mq.closeChan:
+					return fmt.Errorf("queue closed")
+				case msg, ok := <-msgs:
+					if !ok {
+						return fmt.Errorf("channel closed")
+					}
+					if err := handler(ctx, msg.Body); err != nil {
+						msg.Reject(false)
+						continue
+					}
+					msg.Ack(false)
+				}
+			}
+		})
+	}
+
+	return g.Wait()
 }
 
 func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"log"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
+	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 )
 
 type PinWorker struct {
@@ -40,7 +40,7 @@ func NewPinWorker(
 }
 
 func (w *PinWorker) Start(ctx context.Context) error {
-	return w.queue.Dequeue(ctx, w.cfg.RabbitMQ.Pin.Queue, w.handleMessage)
+	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Pin.Queue, w.cfg.Workers.PinConcurrency, w.handleMessage)
 }
 
 type requestMessage struct {

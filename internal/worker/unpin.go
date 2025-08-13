@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"log"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 )
 
 type UnpinWorker struct {
@@ -34,7 +34,7 @@ func NewUnpinWorker(
 }
 
 func (w *UnpinWorker) Start(ctx context.Context) error {
-	return w.queue.Dequeue(ctx, w.cfg.RabbitMQ.Unpin.Queue, w.handleMessage)
+	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Unpin.Queue, w.cfg.Workers.UnpinConcurrency, w.handleMessage)
 }
 
 func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
