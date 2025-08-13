@@ -70,7 +70,7 @@ func (c *Client) PinRm(ctx context.Context, cidStr string) error {
 
 func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
 	var gcResp string
-	err := c.ipfsCli.Request("/repo/gc").Exec(ctx, &gcResp)
+	err := c.ipfsCli.Request("repo/gc").Exec(ctx, &gcResp)
 	log.Println("gcResp:", gcResp)
 	if err != nil {
 		return GCReport{}, err
@@ -78,12 +78,11 @@ func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
 	return GCReport{}, nil
 }
 
-func (c *Client) RepoStat(ctx context.Context) (RepoStat, error) {
-	var result RepoStat
-	err := c.ipfsCli.Request("/repo/stat").Exec(ctx, &result)
-	log.Println("result:", result)
+func (c *Client) RepoStat(ctx context.Context) (*RepoStat, error) {
+	repoStat := &RepoStat{}
+	err := c.ipfsCli.Request("repo/stat").Exec(ctx, repoStat)
 	if err != nil {
-		return RepoStat{}, err
+		return nil, err
 	}
-	return result, nil
+	return repoStat, nil
 }
