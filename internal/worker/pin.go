@@ -9,6 +9,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
@@ -114,10 +115,13 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	ttl := w.policy.Compute(size)
+	ttl, bucket := w.policy.ComputeWithBucket(size)
 
 	log.Printf("Starting pin operation for CID: %s", cid)
-	if err = w.ipfs.PinAdd(ctx, cid); err != nil {
+	start := time.Now()
+	err = w.ipfs.PinAdd(ctx, cid)
+	monitor.ObserveOperation(monitor.OpPinAdd, time.Since(start), err)
+	if err != nil {
 		log.Printf("Failed to pin CID %s: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
@@ -134,6 +138,10 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		log.Printf("Failed to update record status: %v", err)
 		return err
 	}
+
+	// Observe file size for successful pin
+	monitor.ObserveFileSize(size)
+	monitor.ObserveTTLBucket(bucket)
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
@@ -57,7 +58,10 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Execute unpin
-	if err = w.ipfs.PinRm(ctx, cid); err != nil {
+	start := time.Now()
+	err = w.ipfs.PinRm(ctx, cid)
+	monitor.ObserveOperation(monitor.OpPinRm, time.Since(start), err)
+	if err != nil {
 		if err.Error() == "pin/rm: not pinned or pinned indirectly" {
 			// Not pinned already; treat as success
 			log.Printf("CID %s is already unpinned", cid)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 )
 
 type GCWorker struct {
@@ -42,7 +43,10 @@ func (w *GCWorker) Start(ctx context.Context) error {
 
 func (w *GCWorker) runGC(ctx context.Context) error {
 	// Execute GC only, no repo/stat calls here
-	if err := w.ipfs.RepoGC(ctx); err != nil {
+	start := time.Now()
+	err := w.ipfs.RepoGC(ctx)
+	monitor.ObserveOperation(monitor.OpRepoGC, time.Since(start), err)
+	if err != nil {
 		return err
 	}
 	log.Printf("GC completed")

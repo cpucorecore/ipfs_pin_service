@@ -14,6 +14,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/api"
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
@@ -54,6 +55,7 @@ func main() {
 	server := api.NewServer(st, mq)
 	router := gin.Default()
 	server.Routes(router)
+	monitor.RegisterMetricsRoute(router)
 
 	// 创建 workers
 	pinWorker := worker.NewPinWorker(st, mq, ipfsClient, policy, cfg)
@@ -61,6 +63,8 @@ func main() {
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
 	statWorker := worker.NewStatWorker(ipfsClient, cfg)
 	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
+	queueMonitor := worker.NewQueueMonitor(mq, cfg)
+	ipfsHealth := worker.NewIPFSHealthWorker(ipfsClient, cfg)
 	ttlChecker := worker.NewTTLChecker(st, mq, cfg)
 
 	// 创建上下文
@@ -115,6 +119,22 @@ func main() {
 		defer wg.Done()
 		if err := bitswapStatWorker.Start(ctx); err != nil {
 			log.Printf("Bitswap stat worker stopped: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := queueMonitor.Start(ctx); err != nil {
+			log.Printf("Queue monitor stopped: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := ipfsHealth.Start(ctx); err != nil {
+			log.Printf("IPFS health worker stopped: %v", err)
 		}
 	}()
 

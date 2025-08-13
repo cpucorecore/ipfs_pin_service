@@ -7,6 +7,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 )
 
 type StatWorker struct {
@@ -35,11 +36,17 @@ func (w *StatWorker) Start(ctx context.Context) error {
 }
 
 func (w *StatWorker) runStat(ctx context.Context) error {
+	start := time.Now()
 	stat, err := w.ipfs.RepoStat(ctx)
+	monitor.ObserveOperation(monitor.OpRepoStat, time.Since(start), err)
 	if err != nil {
 		return err
 	}
+	monitor.RecordRepoStat(stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
 	log.Printf("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s",
 		stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
+
+	// Queue stats (use MessageQueue Stats via a small helper worker if needed). Here we skip direct call to avoid circular deps.
+
 	return nil
 }

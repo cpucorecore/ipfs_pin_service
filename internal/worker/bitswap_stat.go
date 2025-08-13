@@ -7,6 +7,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 )
 
 type BitswapStatWorker struct {
@@ -35,10 +36,19 @@ func (w *BitswapStatWorker) Start(ctx context.Context) error {
 }
 
 func (w *BitswapStatWorker) run(ctx context.Context) error {
+	start := time.Now()
 	bs, err := w.ipfs.BitswapStat(ctx)
+	monitor.ObserveOperation(monitor.OpBitswapStat, time.Since(start), err)
 	if err != nil {
 		return err
 	}
+	monitor.RecordBitswapStat(
+		len(bs.Peers), len(bs.Wantlist),
+		bs.BlocksReceived, bs.BlocksSent,
+		bs.DataReceived, bs.DataSent,
+		bs.DupBlksReceived, bs.DupDataReceived,
+		bs.MessagesReceived,
+	)
 	log.Printf("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d",
 		len(bs.Peers), len(bs.Wantlist),
 		bs.BlocksReceived, bs.BlocksSent,
