@@ -41,25 +41,10 @@ func (w *GCWorker) Start(ctx context.Context) error {
 }
 
 func (w *GCWorker) runGC(ctx context.Context) error {
-	// Capture repo stats before GC
-	beforeStat, err := w.ipfs.RepoStat(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Execute GC
+	// Execute GC only, no repo/stat calls here
 	if err := w.ipfs.RepoGC(ctx); err != nil {
 		return err
 	}
-
-	// Capture repo stats after GC
-	afterStat, err := w.ipfs.RepoStat(ctx)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("GC completed: freed %d bytes",
-		beforeStat.RepoSize-afterStat.RepoSize)
-
+	log.Printf("GC completed")
 	return nil
 }

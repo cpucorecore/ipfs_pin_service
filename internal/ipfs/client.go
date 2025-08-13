@@ -94,7 +94,7 @@ type BitswapStat struct {
 
 func (c *Client) BitswapStat(ctx context.Context) (*BitswapStat, error) {
 	bitswapStat := &BitswapStat{}
-	err := c.ipfsCli.Request("bitswap/stat").Exec(ctx, &bitswapStat)
+	err := c.ipfsCli.Request("bitswap/stat").Exec(ctx, bitswapStat)
 	if err != nil {
 		return nil, err
 	}

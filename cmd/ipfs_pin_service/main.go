@@ -59,6 +59,8 @@ func main() {
 	pinWorker := worker.NewPinWorker(st, mq, ipfsClient, policy, cfg)
 	unpinWorker := worker.NewUnpinWorker(st, mq, ipfsClient, cfg)
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
+	statWorker := worker.NewStatWorker(ipfsClient, cfg)
+	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
 	ttlChecker := worker.NewTTLChecker(st, mq, cfg)
 
 	// 创建上下文
@@ -97,6 +99,22 @@ func main() {
 		defer wg.Done()
 		if err := ttlChecker.Start(ctx); err != nil {
 			log.Printf("TTL checker stopped: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := statWorker.Start(ctx); err != nil {
+			log.Printf("Stat worker stopped: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := bitswapStatWorker.Start(ctx); err != nil {
+			log.Printf("Bitswap stat worker stopped: %v", err)
 		}
 	}()
 
