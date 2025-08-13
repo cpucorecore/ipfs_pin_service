@@ -12,10 +12,6 @@ import (
 	"github.com/ipfs/kubo/client/rpc"
 )
 
-type GCReport struct {
-	KeysRemoved int64
-}
-
 type RepoStat struct {
 	RepoSize   int64  `json:"RepoSize"`
 	StorageMax int64  `json:"StorageMax"`
@@ -71,12 +67,8 @@ func (c *Client) PinRm(ctx context.Context, cidStr string) error {
 	return c.ipfsCli.Pin().Rm(ctx, p)
 }
 
-func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
-	err := c.ipfsCli.Request("repo/gc").Option("quiet", true).Exec(ctx, nil)
-	if err != nil {
-		return GCReport{}, err
-	}
-	return GCReport{}, nil
+func (c *Client) RepoGC(ctx context.Context) error {
+	return c.ipfsCli.Request("repo/gc").Option("quiet", true).Exec(ctx, nil)
 }
 
 func (c *Client) RepoStat(ctx context.Context) (*RepoStat, error) {
