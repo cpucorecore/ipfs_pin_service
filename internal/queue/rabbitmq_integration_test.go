@@ -30,17 +30,18 @@ func TestDequeueConcurrent_Integration(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.RabbitMQ.URL = url
 	cfg.RabbitMQ.Prefetch = 1
-	cfg.RabbitMQ.Pin.Exchange = "it.pin.exchange"
-	cfg.RabbitMQ.Pin.Queue = "it.pin.queue"
-	cfg.RabbitMQ.Pin.DLX = "it.pin.dlx"
-	cfg.RabbitMQ.Pin.RetryQueue = "it.pin.retry.queue"
+	suffix := fmt.Sprintf(".%d", time.Now().UnixNano())
+	cfg.RabbitMQ.Pin.Exchange = "it.pin.exchange" + suffix
+	cfg.RabbitMQ.Pin.Queue = "it.pin.queue" + suffix
+	cfg.RabbitMQ.Pin.DLX = "it.pin.dlx" + suffix
+	cfg.RabbitMQ.Pin.RetryQueue = "it.pin.retry.queue" + suffix
 	cfg.RabbitMQ.Pin.RetryDelay = time.Second
 
 	// Unpin topology is required by setupTopology; set distinct names
-	cfg.RabbitMQ.Unpin.Exchange = "it.unpin.exchange"
-	cfg.RabbitMQ.Unpin.Queue = "it.unpin.queue"
-	cfg.RabbitMQ.Unpin.DLX = "it.unpin.dlx"
-	cfg.RabbitMQ.Unpin.RetryQueue = "it.unpin.retry.queue"
+	cfg.RabbitMQ.Unpin.Exchange = "it.unpin.exchange" + suffix
+	cfg.RabbitMQ.Unpin.Queue = "it.unpin.queue" + suffix
+	cfg.RabbitMQ.Unpin.DLX = "it.unpin.dlx" + suffix
+	cfg.RabbitMQ.Unpin.RetryQueue = "it.unpin.retry.queue" + suffix
 	cfg.RabbitMQ.Unpin.RetryDelay = time.Second
 
 	mq, err := NewRabbitMQ(cfg)
@@ -87,6 +88,31 @@ func TestDequeueConcurrent_Integration(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 
+	// stop consumers before cleanup
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+
+	// cleanup created topology to keep local RabbitMQ tidy
+	cleanup := func() {
+		ch, err := mq.conn.Channel()
+		if err != nil {
+			return
+		}
+		defer ch.Close()
+
+		// queues
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Pin.Queue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Pin.RetryQueue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Unpin.Queue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Unpin.RetryQueue, false, false, false)
+		// exchanges
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Pin.Exchange, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Pin.DLX, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Unpin.Exchange, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Unpin.DLX, false, false)
+	}
+	cleanup()
+
 	serial := time.Duration(K) * sleepPerMsg
 	parallel := time.Duration((K+concurrency-1)/concurrency) * sleepPerMsg
 
@@ -112,17 +138,18 @@ func TestDequeueConcurrent_ErrorFlow_Integration(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.RabbitMQ.URL = url
 	cfg.RabbitMQ.Prefetch = 1
-	cfg.RabbitMQ.Pin.Exchange = "it.err.pin.exchange"
-	cfg.RabbitMQ.Pin.Queue = "it.err.pin.queue"
-	cfg.RabbitMQ.Pin.DLX = "it.err.pin.dlx"
-	cfg.RabbitMQ.Pin.RetryQueue = "it.err.pin.retry"
+	suffix := fmt.Sprintf(".%d", time.Now().UnixNano())
+	cfg.RabbitMQ.Pin.Exchange = "it.err.pin.exchange" + suffix
+	cfg.RabbitMQ.Pin.Queue = "it.err.pin.queue" + suffix
+	cfg.RabbitMQ.Pin.DLX = "it.err.pin.dlx" + suffix
+	cfg.RabbitMQ.Pin.RetryQueue = "it.err.pin.retry" + suffix
 	cfg.RabbitMQ.Pin.RetryDelay = 300 * time.Millisecond
 
 	// Unpin topology to satisfy setup
-	cfg.RabbitMQ.Unpin.Exchange = "it.err.unpin.exchange"
-	cfg.RabbitMQ.Unpin.Queue = "it.err.unpin.queue"
-	cfg.RabbitMQ.Unpin.DLX = "it.err.unpin.dlx"
-	cfg.RabbitMQ.Unpin.RetryQueue = "it.err.unpin.retry"
+	cfg.RabbitMQ.Unpin.Exchange = "it.err.unpin.exchange" + suffix
+	cfg.RabbitMQ.Unpin.Queue = "it.err.unpin.queue" + suffix
+	cfg.RabbitMQ.Unpin.DLX = "it.err.unpin.dlx" + suffix
+	cfg.RabbitMQ.Unpin.RetryQueue = "it.err.unpin.retry" + suffix
 	cfg.RabbitMQ.Unpin.RetryDelay = 300 * time.Millisecond
 
 	mq, err := NewRabbitMQ(cfg)
@@ -164,5 +191,23 @@ func TestDequeueConcurrent_ErrorFlow_Integration(t *testing.T) {
 
 	if attempts < 2 {
 		t.Fatalf("expected at least 2 attempts, got %d", attempts)
+	}
+
+	// stop consumer and cleanup topology
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+	ch, err := mq.conn.Channel()
+	if err == nil {
+		defer ch.Close()
+		// queues
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Pin.Queue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Pin.RetryQueue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Unpin.Queue, false, false, false)
+		_, _ = ch.QueueDelete(cfg.RabbitMQ.Unpin.RetryQueue, false, false, false)
+		// exchanges
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Pin.Exchange, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Pin.DLX, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Unpin.Exchange, false, false)
+		_ = ch.ExchangeDelete(cfg.RabbitMQ.Unpin.DLX, false, false)
 	}
 }

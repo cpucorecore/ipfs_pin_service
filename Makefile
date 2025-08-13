@@ -1,4 +1,4 @@
-.PHONY: all build clean proto
+.PHONY: all build clean proto integration
 
 # 设置 Go 编译器和标志
 GO := go
@@ -37,6 +37,10 @@ deps:
 test:
 	$(GO) test ./...
 
+# Run integration tests that require local RabbitMQ
+integration:
+	IT_RABBITMQ=1 $(GO) test ./internal/queue -tags=integration -count=1
+
 # 帮助信息
 help:
 	@echo "可用的 make 命令："
@@ -46,4 +50,5 @@ help:
 	@echo "  make clean    - 清理生成的文件"
 	@echo "  make deps     - 安装依赖"
 	@echo "  make test     - 运行测试"
+	@echo "  make integration - 运行需要本地 RabbitMQ 的集成测试"
 	@echo "  make help     - 显示帮助信息"
