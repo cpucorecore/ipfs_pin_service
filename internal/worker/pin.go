@@ -149,7 +149,8 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) error {
 	log.Printf("Pin operation failed for %s: %v", cid, err)
 
-	return w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	// Update attempt count and decide whether to retry (return error) or stop (ack with dead letter)
+	updateErr := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.PinAttemptCount++
 
 		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
@@ -157,7 +158,18 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) e
 			return nil
 		}
 
+		// keep in Pinning for retry
 		r.Status = store.StatusPinning
 		return nil
 	})
+	if updateErr != nil {
+		return updateErr
+	}
+	// If still under max retries, return non-nil to trigger DLX retry
+	rec, _ := w.store.Get(ctx, cid)
+	if rec != nil && rec.PinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+		return errors.New("retry pin")
+	}
+	// Max retries reached; ack (nil) and keep DeadLetter status
+	return nil
 }

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -109,7 +110,8 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, err error) error {
 	log.Printf("Unpin operation failed for %s: %v", cid, err)
 
-	return w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	// Update attempt count and decide whether to retry or dead-letter
+	updateErr := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.UnpinAttemptCount++
 
 		if r.UnpinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
@@ -117,8 +119,17 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, err erro
 			return nil
 		}
 
-		// Retry
+		// schedule for retry
 		r.Status = store.StatusScheduledForUnpin
 		return nil
 	})
+	if updateErr != nil {
+		return updateErr
+	}
+
+	rec, _ := w.store.Get(ctx, cid)
+	if rec != nil && rec.UnpinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+		return errors.New("retry unpin")
+	}
+	return nil
 }
