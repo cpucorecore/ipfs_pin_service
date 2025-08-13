@@ -152,8 +152,17 @@ func (mq *RabbitMQ) declareExchangeWithRecovery(name, kind string, durable bool)
 		return nil
 	}
 	if isPreconditionFailed(err) {
-		// attempt delete then recreate
+		// Channel is closed by broker on 406; reopen and then recreate
+		if rerr := mq.reopenChannel(); rerr != nil {
+			return rerr
+		}
 		_ = mq.ch.ExchangeDelete(name, false, false)
+		return mq.ch.ExchangeDeclare(name, kind, durable, false, false, false, nil)
+	}
+	if isChannelNotOpen(err) {
+		if rerr := mq.reopenChannel(); rerr != nil {
+			return rerr
+		}
 		return mq.ch.ExchangeDeclare(name, kind, durable, false, false, false, nil)
 	}
 	return err
@@ -174,8 +183,18 @@ func (mq *RabbitMQ) declareQueueWithRecovery(name string, args amqp.Table) error
 		return nil
 	}
 	if isPreconditionFailed(err) {
-		// attempt delete then recreate
+		// Channel is closed by broker on 406; reopen and then recreate
+		if rerr := mq.reopenChannel(); rerr != nil {
+			return rerr
+		}
 		_, _ = mq.ch.QueueDelete(name, false, false, false)
+		_, err = mq.ch.QueueDeclare(name, true, false, false, false, args)
+		return err
+	}
+	if isChannelNotOpen(err) {
+		if rerr := mq.reopenChannel(); rerr != nil {
+			return rerr
+		}
 		_, err = mq.ch.QueueDeclare(name, true, false, false, false, args)
 		return err
 	}
@@ -191,6 +210,37 @@ func isPreconditionFailed(err error) bool {
 		return amqErr.Code == 406
 	}
 	return strings.Contains(strings.ToUpper(err.Error()), "PRECONDITION_FAILED") || strings.Contains(err.Error(), "406")
+}
+
+func isChannelNotOpen(err error) bool {
+	if err == nil {
+		return false
+	}
+	var amqErr *amqp.Error
+	if errors.As(err, &amqErr) {
+		return amqErr.Code == 504
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "channel/connection is not open") || strings.Contains(s, "504")
+}
+
+func (mq *RabbitMQ) reopenChannel() error {
+	if mq.conn == nil {
+		return fmt.Errorf("amqp connection is nil")
+	}
+	ch, err := mq.conn.Channel()
+	if err != nil {
+		return fmt.Errorf("reopen channel: %w", err)
+	}
+	if err := ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+		ch.Close()
+		return fmt.Errorf("set QoS on reopened channel: %w", err)
+	}
+	if mq.ch != nil {
+		_ = mq.ch.Close()
+	}
+	mq.ch = ch
+	return nil
 }
 
 func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) error {
