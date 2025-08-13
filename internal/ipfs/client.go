@@ -14,10 +14,6 @@ import (
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
-type DagStat struct {
-	Size int64
-}
-
 type GCReport struct {
 	KeysRemoved int64
 }
@@ -31,7 +27,6 @@ type Client struct {
 	sh *shell.Shell
 }
 
-// withRetry wraps an operation with retry logic
 func (c *Client) withRetry(ctx context.Context, operation string, fn func() error) error {
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = 2 * time.Minute
@@ -44,7 +39,6 @@ func (c *Client) withRetry(ctx context.Context, operation string, fn func() erro
 		}
 		err := fn()
 		if err != nil {
-			// Check for temporary errors
 			if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
 				return err // 可以重试
 			}
@@ -62,7 +56,6 @@ func (c *Client) withRetry(ctx context.Context, operation string, fn func() erro
 }
 
 func NewClient(apiAddr string) *Client {
-	// Create shell with custom HTTP client
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -111,59 +104,6 @@ func (c *Client) PinRm(ctx context.Context, cid string) error {
 	return c.sh.Request("pin/rm", cid).
 		Option("recursive", true).
 		Exec(ctx, nil)
-}
-
-func (c *Client) DagStat(ctx context.Context, cid string) (DagStat, error) {
-	var result DagStat
-	var lastErr error
-
-	// Try multiple endpoints to get DAG size
-	tryAllMethods := func() error {
-		var stat struct {
-			Hash           string `json:"Hash"`
-			Size           int64  `json:"Size"`
-			CumulativeSize int64  `json:"CumulativeSize"`
-			Blocks         int64  `json:"Blocks"`
-			Type           string `json:"Type"`
-		}
-
-		// First try files/stat
-		err := c.sh.Request("files/stat", "/ipfs/"+cid).Exec(ctx, &stat)
-		if err == nil && stat.CumulativeSize > 0 {
-			result = DagStat{Size: stat.CumulativeSize}
-			return nil
-		}
-		lastErr = err
-
-		// If files/stat fails, try object/stat
-		err = c.sh.Request("object/stat", cid).Exec(ctx, &stat)
-		if err == nil && stat.CumulativeSize > 0 {
-			result = DagStat{Size: stat.CumulativeSize}
-			return nil
-		}
-		lastErr = err
-
-		// Finally try dag/stat
-		var dagStat struct {
-			Size int64 `json:"size"`
-		}
-		err = c.sh.Request("dag/stat", cid).Exec(ctx, &dagStat)
-		if err == nil {
-			result = DagStat{Size: dagStat.Size}
-			return nil
-		}
-		lastErr = err
-
-		return fmt.Errorf("all stat methods failed for cid %s, last error: %w", cid, lastErr)
-	}
-
-	// Execute with retry
-	err := c.withRetry(ctx, fmt.Sprintf("get stats for %s", cid), tryAllMethods)
-	if err != nil {
-		return DagStat{}, err
-	}
-
-	return result, nil
 }
 
 func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
