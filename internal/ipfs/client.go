@@ -69,9 +69,7 @@ func (c *Client) PinRm(ctx context.Context, cidStr string) error {
 }
 
 func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
-	var gcResp string
-	err := c.ipfsCli.Request("repo/gc").Exec(ctx, &gcResp)
-	log.Println("gcResp:", gcResp)
+	err := c.ipfsCli.Request("repo/gc", "--silent").Exec(ctx, nil)
 	if err != nil {
 		return GCReport{}, err
 	}
