@@ -4,6 +4,7 @@
 GO := go
 BINARY_NAME := ipfs_pin_service
 MAIN_PATH := ./cmd/ipfs_pin_service/main.go
+BIN_DIR := bin
 
 # protoc 编译器和选项
 PROTOC := protoc
@@ -15,7 +16,8 @@ all: proto build
 
 # 编译二进制文件
 build:
-	$(GO) build -o $(BINARY_NAME) $(MAIN_PATH)
+	mkdir -p $(BIN_DIR)
+	$(GO) build -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 
 # 生成 protobuf 代码
 proto:
@@ -23,7 +25,7 @@ proto:
 
 # 清理生成的文件
 clean:
-	rm -f $(BINARY_NAME)
+	rm -f $(BIN_DIR)/$(BINARY_NAME)
 	rm -f proto/*.pb.go
 
 # 安装依赖

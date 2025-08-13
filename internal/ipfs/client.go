@@ -17,8 +17,11 @@ type GCReport struct {
 }
 
 type RepoStat struct {
-	StorageMax int64
-	RepoSize   int64
+	RepoSize   int64  `json:"RepoSize"`
+	StorageMax int64  `json:"StorageMax"`
+	NumObjects int64  `json:"NumObjects"`
+	RepoPath   string `json:"RepoPath"`
+	Version    string `json:"Version"`
 }
 
 type Client struct {
@@ -69,7 +72,7 @@ func (c *Client) PinRm(ctx context.Context, cidStr string) error {
 }
 
 func (c *Client) RepoGC(ctx context.Context) (GCReport, error) {
-	err := c.ipfsCli.Request("repo/gc", "--silent").Exec(ctx, nil)
+	err := c.ipfsCli.Request("repo/gc").Option("quiet", true).Exec(ctx, nil)
 	if err != nil {
 		return GCReport{}, err
 	}
@@ -83,4 +86,25 @@ func (c *Client) RepoStat(ctx context.Context) (*RepoStat, error) {
 		return nil, err
 	}
 	return repoStat, nil
+}
+
+type BitswapStat struct {
+	Wantlist         []string `json:"Wantlist"`
+	Peers            []string `json:"Peers"`
+	BlocksReceived   uint64   `json:"BlocksReceived"`
+	DataReceived     uint64   `json:"DataReceived"`
+	DupBlksReceived  uint64   `json:"DupBlksReceived"`
+	DupDataReceived  uint64   `json:"DupDataReceived"`
+	MessagesReceived uint64   `json:"MessagesReceived"`
+	BlocksSent       uint64   `json:"BlocksSent"`
+	DataSent         uint64   `json:"DataSent"`
+}
+
+func (c *Client) BitswapStat(ctx context.Context) (*BitswapStat, error) {
+	bitswapStat := &BitswapStat{}
+	err := c.ipfsCli.Request("bitswap/stat").Exec(ctx, &bitswapStat)
+	if err != nil {
+		return nil, err
+	}
+	return bitswapStat, nil
 }
