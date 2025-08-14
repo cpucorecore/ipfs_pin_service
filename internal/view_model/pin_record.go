@@ -40,7 +40,6 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 		SizeHuman:         FormatBytes(r.SizeBytes),
 		PinAttemptCount:   r.PinAttemptCount,
 		UnpinAttemptCount: r.UnpinAttemptCount,
-		Age:               FormatDuration(now.Sub(receivedAt)),
 	}
 
 	if r.EnqueuedAt > 0 {
@@ -75,6 +74,28 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 	if r.UnpinSucceededAt > 0 {
 		t := time.UnixMilli(r.UnpinSucceededAt)
 		view.UnpinSucceededAt = FormatTime(t, timeFormat)
+	}
+
+	// Age display depends on status:
+	// - Pinning: duration since PinStartAt
+	// - Unpinning: duration since UnpinStartAt
+	// - Active/PinSucceeded: duration since PinSucceededAt
+	// - others: empty
+	switch r.Status {
+	case store.StatusPinning:
+		if r.PinStartAt > 0 {
+			view.Age = FormatDuration(now.Sub(time.UnixMilli(r.PinStartAt)))
+		}
+	case store.StatusUnpinning:
+		if r.UnpinStartAt > 0 {
+			view.Age = FormatDuration(now.Sub(time.UnixMilli(r.UnpinStartAt)))
+		}
+	case store.StatusActive, store.StatusPinSucceeded:
+		if r.PinSucceededAt > 0 {
+			view.Age = FormatDuration(now.Sub(time.UnixMilli(r.PinSucceededAt)))
+		}
+	default:
+		view.Age = ""
 	}
 
 	return view
