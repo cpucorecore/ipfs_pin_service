@@ -83,3 +83,39 @@ curl "http://localhost:8081/pins/bafy...cid...?time_format=human" --silent | jq
 - TTL 及到期后的 Unpin 流程由 TTLChecker 与 Unpin Worker 协作完成。
 
 
+RabbitMQ 请求
+以下示例展示如何直接向 RabbitMQ 发送消息以驱动 Pin 流程（绕过 HTTP）。交换机与路由键名称以默认配置为准，请根据你的 `config.yaml` 调整：
+
+- Pin：exchange=`pin.exchange`，routing_key=`pin.queue`，payload 为 JSON：`{"cid":"<CID>", "size": <可选字节数>}`。
+
+使用 rabbitmqadmin（推荐简单）
+```bash
+# Pin 示例
+rabbitmqadmin publish \
+  exchange=pin.exchange routing_key=pin.queue \
+  payload='{"cid":"bafy...cid...","size":1048576}'
+
+```
+
+使用 Python（pika）
+```python
+import json, pika
+
+conn = pika.BlockingConnection(pika.URLParameters("amqp://guest:guest@127.0.0.1:5672/"))
+ch = conn.channel()
+
+pin_msg = json.dumps({"cid": "bafy...cid...", "size": 1048576}).encode()
+ch.basic_publish(exchange="pin.exchange", routing_key="pin.queue", body=pin_msg)
+
+# Unpin
+unpin_msg = b"bafy...cid..."
+ch.basic_publish(exchange="unpin.exchange", routing_key="unpin.queue", body=unpin_msg)
+
+conn.close()
+```
+
+注意
+- 交换机/队列均为 durable；服务端在启动时会自动声明拓扑。
+- Pin 重试：消费失败会经 DLX 路由至重试队列（`*.retry.queue`），在 `retry_delay`（`x-message-ttl`）后回流到主交换机。
+- 服务端发布时 `ContentType` 设为 `application/octet-stream`，但消费者仅按字节解析，不依赖该头部。
+
