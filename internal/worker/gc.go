@@ -2,12 +2,12 @@ package worker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type GCWorker struct {
@@ -35,7 +35,7 @@ func (w *GCWorker) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.runGC(ctx); err != nil {
-				log.Printf("GC failed: %v", err)
+				log.Log.Sugar().Errorf("GC failed: %v", err)
 			}
 		}
 	}
@@ -49,6 +49,6 @@ func (w *GCWorker) runGC(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("GC completed")
+	log.Log.Sugar().Infof("GC completed")
 	return nil
 }

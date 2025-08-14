@@ -6,13 +6,14 @@ PY_GEN="$SCRIPT_DIR/gen_random_file.py"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") -m MIN_MB -M MAX_MB -c COUNT [-d OUT_DIR]
+Usage: $(basename "$0") -m MIN_MB -M MAX_MB -c COUNT [-d OUT_DIR] [-L LIST_DIR]
 
 Options:
   -m, --min     Minimum file size in MB (inclusive)
   -M, --max     Maximum file size in MB (inclusive)
   -c, --count   Number of files to generate
-  -d, --dir     Output directory (default: current directory)
+  -d, --dir         Output directory (default: current directory)
+  -L, --list-dir    Directory to write the 'files' list (default: OUT_DIR)
 
 Notes:
   - Generated filenames follow the pattern r{SIZE}M (e.g., r10M).
@@ -25,6 +26,7 @@ MIN_MB=""
 MAX_MB=""
 COUNT=""
 OUT_DIR="$(pwd)"
+LIST_DIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +38,8 @@ while [[ $# -gt 0 ]]; do
       COUNT="$2"; shift 2 ;;
     -d|--dir)
       OUT_DIR="$2"; shift 2 ;;
+    -L|--list-dir)
+      LIST_DIR="$2"; shift 2 ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -65,7 +69,14 @@ if [[ ! -f "$PY_GEN" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
-FILES_LIST="$OUT_DIR/files"
+
+# Determine list directory
+if [[ -z "$LIST_DIR" ]]; then
+  LIST_DIR="$OUT_DIR"
+fi
+mkdir -p "$LIST_DIR"
+
+FILES_LIST="$LIST_DIR/files"
 : > "$FILES_LIST"  # truncate
 
 generate_random_size() {

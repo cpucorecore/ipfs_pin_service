@@ -8,6 +8,12 @@ import (
 )
 
 type Config struct {
+	Log struct {
+		Level         string        `yaml:"level"`
+		Async         bool          `yaml:"async"`
+		BufferSize    int           `yaml:"buffer_size"`
+		FlushInterval time.Duration `yaml:"flush_interval"` // seconds
+	} `yaml:"log"`
 	HTTP struct {
 		Port int `yaml:"port"`
 	} `yaml:"http"`

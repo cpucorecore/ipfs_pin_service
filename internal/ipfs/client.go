@@ -2,7 +2,6 @@ package ipfs
 
 import (
 	"context"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/ipfs/kubo/client/rpc"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type RepoStat struct {
@@ -55,7 +55,7 @@ func NewClientWithConfig(url string, cfg *config.Config) *Client {
 
 	ipfsCli, err := rpc.NewURLApiWithClient(url, httpClient)
 	if err != nil {
-		log.Fatal(err)
+		log.Log.Sugar().Fatalf("create ipfs client error: %v", err)
 	}
 
 	return &Client{ipfsCli: ipfsCli}
@@ -64,7 +64,7 @@ func NewClientWithConfig(url string, cfg *config.Config) *Client {
 func getCidPath(cidStr string) ipfspath.Path {
 	cid, err := ipfscid.Decode(cidStr)
 	if err != nil {
-		log.Fatal(err) // already precheck request
+		log.Log.Sugar().Fatalf("decode cid error: %v", err) // already precheck request
 	}
 	return ipfspath.FromCid(cid)
 }

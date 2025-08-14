@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
@@ -14,6 +13,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type PinWorker struct {
@@ -50,15 +50,15 @@ type requestMessage struct {
 }
 
 func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
-	log.Printf("Received pin message with body length: %d", len(body))
+	log.Log.Sugar().Infof("Received pin message with body length: %d", len(body))
 	var req requestMessage
 	if err := json.Unmarshal(body, &req); err != nil {
-		log.Printf("Failed to unmarshal request message: %v", err)
+		log.Log.Sugar().Errorf("Failed to unmarshal request message: %v", err)
 		return err
 	}
 
 	if !util.CheckCid(req.Cid) {
-		log.Printf("Warning: wrong pin cid: %s", req.Cid)
+		log.Log.Sugar().Warnf("Warning: wrong pin cid: %s", req.Cid)
 		return nil
 	}
 
@@ -69,7 +69,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	// Upsert record to ensure existence and size availability
 	rec, err := w.store.Get(ctx, cid)
 	if err != nil {
-		log.Printf("Failed to get record %s: %v", cid, err)
+		log.Log.Sugar().Errorf("Failed to get record %s: %v", cid, err)
 		return err
 	}
 	if rec == nil {
@@ -81,7 +81,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 			SizeBytes:    req.Size,
 		}
 		if err := w.store.Put(ctx, rec); err != nil {
-			log.Printf("Failed to upsert record %s: %v", cid, err)
+			log.Log.Sugar().Errorf("Failed to upsert record %s: %v", cid, err)
 			return err
 		}
 	} else if req.Size > 0 && rec.SizeBytes != req.Size {
@@ -90,7 +90,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 			r.LastUpdateAt = now
 			return nil
 		}); err != nil {
-			log.Printf("Failed to update size for %s: %v", cid, err)
+			log.Log.Sugar().Errorf("Failed to update size for %s: %v", cid, err)
 			return err
 		}
 	}
@@ -107,13 +107,13 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return nil
 	})
 	if err != nil {
-		log.Printf("Failed to update record status: %v", err)
+		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}
 
 	ttl, bucket := w.policy.ComputeWithBucket(size)
 
-	log.Printf("Starting pin operation for CID: %s", cid)
+	log.Log.Sugar().Infof("Starting pin operation for CID: %s", cid)
 	// Add per-operation timeout if configured
 	ctxPin := ctx
 	var cancel context.CancelFunc
@@ -125,10 +125,10 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	err = w.ipfs.PinAdd(ctxPin, cid)
 	monitor.ObserveOperation(monitor.OpPinAdd, time.Since(start), err)
 	if err != nil {
-		log.Printf("Failed to pin CID %s: %v", cid, err)
+		log.Log.Sugar().Errorf("Failed to pin CID %s: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
-	log.Printf("Successfully pinned CID: %s", cid)
+	log.Log.Sugar().Infof("Successfully pinned CID: %s", cid)
 
 	t := time.Now()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
@@ -138,7 +138,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return nil
 	})
 	if err != nil {
-		log.Printf("Failed to update record status: %v", err)
+		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}
 
@@ -150,7 +150,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 }
 
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) error {
-	log.Printf("Pin operation failed for %s: %v", cid, err)
+	log.Log.Sugar().Errorf("Pin operation failed for %s: %v", cid, err)
 
 	// Update attempt count and decide whether to retry (return error) or stop (ack with dead letter)
 	updateErr := w.store.Update(ctx, cid, func(r *store.PinRecord) error {

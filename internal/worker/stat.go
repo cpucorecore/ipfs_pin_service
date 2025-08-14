@@ -2,12 +2,12 @@ package worker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type StatWorker struct {
@@ -29,7 +29,7 @@ func (w *StatWorker) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.runStat(ctx); err != nil {
-				log.Printf("Repo stat failed: %v", err)
+				log.Log.Sugar().Errorf("Repo stat failed: %v", err)
 			}
 		}
 	}
@@ -43,7 +43,7 @@ func (w *StatWorker) runStat(ctx context.Context) error {
 		return err
 	}
 	monitor.RecordRepoStat(stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
-	log.Printf("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s",
+	log.Log.Sugar().Infof("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s",
 		stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
 
 	// Queue stats (use MessageQueue Stats via a small helper worker if needed). Here we skip direct call to avoid circular deps.

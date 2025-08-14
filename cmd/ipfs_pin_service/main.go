@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +18,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
 	"github.com/cpucorecore/ipfs_pin_service/internal/worker"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,22 +26,28 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	flag.Parse()
 
+	// Initialize a development logger early to log config load errors
+	log.InitLoggerForTest()
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Log.Sugar().Fatalf("Failed to load config: %v", err)
 	}
+
+	// 初始化日志
+	log.InitLoggerWithConfig(cfg)
 
 	// 创建存储
 	st, err := store.NewPebbleStore(".db")
 	if err != nil {
-		log.Fatalf("Failed to create store: %v", err)
+		log.Log.Sugar().Fatalf("Failed to create store: %v", err)
 	}
 	defer st.Close()
 
 	// 创建消息队列
 	mq, err := queue.NewRabbitMQ(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create queue: %v", err)
+		log.Log.Sugar().Fatalf("Failed to create queue: %v", err)
 	}
 	defer mq.Close()
 
@@ -78,7 +84,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err = pinWorker.Start(ctx); err != nil {
-			log.Printf("Pin worker stopped: %v", err)
+			log.Log.Sugar().Errorf("Pin worker stopped: %v", err)
 		}
 	}()
 
@@ -86,7 +92,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := unpinWorker.Start(ctx); err != nil {
-			log.Printf("Unpin worker stopped: %v", err)
+			log.Log.Sugar().Errorf("Unpin worker stopped: %v", err)
 		}
 	}()
 
@@ -94,7 +100,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := gcWorker.Start(ctx); err != nil {
-			log.Printf("GC worker stopped: %v", err)
+			log.Log.Sugar().Errorf("GC worker stopped: %v", err)
 		}
 	}()
 
@@ -102,7 +108,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := ttlChecker.Start(ctx); err != nil {
-			log.Printf("TTL checker stopped: %v", err)
+			log.Log.Sugar().Errorf("TTL checker stopped: %v", err)
 		}
 	}()
 
@@ -110,7 +116,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := statWorker.Start(ctx); err != nil {
-			log.Printf("Stat worker stopped: %v", err)
+			log.Log.Sugar().Errorf("Stat worker stopped: %v", err)
 		}
 	}()
 
@@ -118,7 +124,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := bitswapStatWorker.Start(ctx); err != nil {
-			log.Printf("Bitswap stat worker stopped: %v", err)
+			log.Log.Sugar().Errorf("Bitswap stat worker stopped: %v", err)
 		}
 	}()
 
@@ -126,7 +132,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := queueMonitor.Start(ctx); err != nil {
-			log.Printf("Queue monitor stopped: %v", err)
+			log.Log.Sugar().Errorf("Queue monitor stopped: %v", err)
 		}
 	}()
 
@@ -134,7 +140,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := ipfsHealth.Start(ctx); err != nil {
-			log.Printf("IPFS health worker stopped: %v", err)
+			log.Log.Sugar().Errorf("IPFS health worker stopped: %v", err)
 		}
 	}()
 
@@ -146,7 +152,7 @@ func main() {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP server error: %v", err)
+			log.Log.Sugar().Errorf("HTTP server error: %v", err)
 		}
 	}()
 
@@ -158,7 +164,7 @@ func main() {
 	// 优雅关闭
 	cancel()
 	if err := srv.Shutdown(context.Background()); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		log.Log.Sugar().Errorf("HTTP server shutdown error: %v", err)
 	}
 	wg.Wait()
 }

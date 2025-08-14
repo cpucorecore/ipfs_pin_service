@@ -2,12 +2,12 @@ package worker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type BitswapStatWorker struct {
@@ -29,7 +29,7 @@ func (w *BitswapStatWorker) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.run(ctx); err != nil {
-				log.Printf("Bitswap stat failed: %v", err)
+				log.Log.Sugar().Errorf("Bitswap stat failed: %v", err)
 			}
 		}
 	}
@@ -49,7 +49,7 @@ func (w *BitswapStatWorker) run(ctx context.Context) error {
 		bs.DupBlksReceived, bs.DupDataReceived,
 		bs.MessagesReceived,
 	)
-	log.Printf("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d",
+	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d",
 		len(bs.Peers), len(bs.Wantlist),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,

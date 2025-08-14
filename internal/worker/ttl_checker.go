@@ -2,12 +2,12 @@ package worker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type TTLChecker struct {
@@ -38,7 +38,7 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := c.checkExpiredRecords(ctx); err != nil {
-				log.Printf("TTL check failed: %v", err)
+				log.Log.Sugar().Errorf("TTL check failed: %v", err)
 			}
 		}
 	}
@@ -48,17 +48,17 @@ func (c *TTLChecker) checkExpiredRecords(ctx context.Context) error {
 	now := time.Now().UnixMilli()
 	expiredRecords, err := c.store.IndexByExpireBefore(ctx, now, c.cfg.TTLChecker.BatchSize)
 	if err != nil {
-		log.Printf("Failed to get expired records: %v", err)
+		log.Log.Sugar().Errorf("Failed to get expired records: %v", err)
 		return err
 	}
 
-	log.Printf("ttl: Found %d expired records", len(expiredRecords))
+	log.Log.Sugar().Infof("ttl: Found %d expired records", len(expiredRecords))
 
 	processedCount := 0
 	for _, cid := range expiredRecords {
 		rec, err := c.store.Get(ctx, cid)
 		if err != nil {
-			log.Printf("Failed to get record %s: %v", cid, err)
+			log.Log.Sugar().Errorf("Failed to get record %s: %v", cid, err)
 			continue
 		}
 		if rec == nil {
@@ -77,22 +77,22 @@ func (c *TTLChecker) checkExpiredRecords(ctx context.Context) error {
 			return nil
 		})
 		if err != nil {
-			log.Printf("Failed to update record %s: %v", cid, err)
+			log.Log.Sugar().Errorf("Failed to update record %s: %v", cid, err)
 			continue
 		}
 
 		// Enqueue only CID to unpin queue
 		if err := c.queue.Enqueue(ctx, c.cfg.RabbitMQ.Unpin.Exchange, []byte(cid)); err != nil {
-			log.Printf("Failed to enqueue record %s: %v", cid, err)
+			log.Log.Sugar().Errorf("Failed to enqueue record %s: %v", cid, err)
 			continue
 		}
 
 		processedCount++
-		log.Printf("Scheduled record %s for unpin", cid)
+		log.Log.Sugar().Infof("Scheduled record %s for unpin", cid)
 	}
 
 	if processedCount > 0 {
-		log.Printf("TTL check completed: processed %d expired records", processedCount)
+		log.Log.Sugar().Infof("TTL check completed: processed %d expired records", processedCount)
 	}
 
 	return nil
