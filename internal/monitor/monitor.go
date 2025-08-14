@@ -19,81 +19,65 @@ const (
 var (
 	opDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "ipfs_pin_service",
-			Name:      "operation_duration_seconds",
-			Help:      "Duration of IPFS operations.",
-			Buckets:   prometheus.DefBuckets,
+			Name:    "ipfs_operation_duration_seconds",
+			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"operation"},
 	)
 
 	opTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ipfs_pin_service",
-			Name:      "operation_total",
-			Help:      "Total IPFS operations by status.",
+			Name: "ipfs_operation_total",
 		},
 		[]string{"operation", "status"},
 	)
 
 	fileSizeHist = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
-			Namespace: "ipfs_pin_service",
-			Name:      "pin_file_size_bytes",
-			Help:      "Observed pinned file sizes in bytes.",
-			Buckets:   prometheus.ExponentialBuckets(1024, 2, 20),
+			Name:    "ipfs_pin_file_size_bytes",
+			Buckets: prometheus.ExponentialBuckets(1024, 2, 20),
 		},
 	)
 
 	// TTL buckets: count of files falling into configured size buckets
 	ttlBucketCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ipfs_pin_service",
-			Name:      "ttl_bucket_total",
-			Help:      "Count of files by TTL size bucket.",
+			Name: "ipfs_ttl_bucket_total",
 		},
 		[]string{"bucket"},
 	)
 
 	// Repo stat gauges
 	repoSizeBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "ipfs_pin_service",
-		Name:      "repo_size_bytes",
-		Help:      "Current IPFS repo size in bytes.",
+		Name: "ipfs_repo_size_bytes",
 	})
 	repoStorageMaxBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "ipfs_pin_service",
-		Name:      "repo_storage_max_bytes",
-		Help:      "Max storage configured for IPFS repo in bytes.",
+		Name: "ipfs_repo_storage_max_bytes",
 	})
 	repoNumObjects = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "ipfs_pin_service",
-		Name:      "repo_num_objects",
-		Help:      "Number of objects in IPFS repo.",
+		Name: "ipfs_repo_num_objects",
 	})
 	repoInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "ipfs_pin_service",
-		Name:      "repo_info",
-		Help:      "Repo info labels (path, version).",
+		Name: "ipfs_repo_info",
 	}, []string{"path", "version"})
 
 	// Bitswap stat gauges
-	bsPeers             = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_peers", Help: "Number of bitswap peers."})
-	bsWantlist          = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_wantlist", Help: "Number of entries in bitswap wantlist."})
-	bsBlocksReceived    = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_blocks_received_total", Help: "Blocks received (monotonic as reported)."})
-	bsBlocksSent        = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_blocks_sent_total", Help: "Blocks sent (monotonic as reported)."})
-	bsDataReceived      = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_data_received_bytes_total", Help: "Bytes received (monotonic as reported)."})
-	bsDataSent          = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_data_sent_bytes_total", Help: "Bytes sent (monotonic as reported)."})
-	bsDupBlocksReceived = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_dup_blocks_received_total", Help: "Duplicate blocks received."})
-	bsDupDataReceived   = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_dup_data_received_bytes_total", Help: "Duplicate data bytes received."})
-	bsMessagesReceived  = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "bitswap_messages_received_total", Help: "Messages received."})
+	bsPeers             = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_peers"})
+	bsWantlist          = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_wantlist"})
+	bsBlocksReceived    = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_blocks_received_total"})
+	bsBlocksSent        = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_blocks_sent_total"})
+	bsDataReceived      = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_data_received_bytes_total"})
+	bsDataSent          = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_data_sent_bytes_total"})
+	bsDupBlocksReceived = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_dup_blocks_received_total"})
+	bsDupDataReceived   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_dup_data_received_bytes_total"})
+	bsMessagesReceived  = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_messages_received_total"})
 
 	// Queue gauges
-	queueReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "queue_ready", Help: "Ready message count in queue."}, []string{"queue"})
-	queueTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "queue_total", Help: "Total messages in queue (sum of broker reported)."}, []string{"queue"})
+	queueReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_ready"}, []string{"queue"})
+	queueTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_total"}, []string{"queue"})
 
 	// IPFS availability
-	ipfsAvailable = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: "ipfs_pin_service", Name: "ipfs_available", Help: "IPFS API availability (1 up, 0 down)."})
+	ipfsAvailable = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_available"})
 )
 
 func init() {
