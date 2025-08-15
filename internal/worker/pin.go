@@ -44,14 +44,13 @@ func (w *PinWorker) Start(ctx context.Context) error {
 	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Pin.Queue, w.cfg.Workers.PinConcurrency, w.handleMessage)
 }
 
-type requestMessage struct {
+type PinRequestMsg struct {
 	Cid  string `json:"cid"`
 	Size int64  `json:"size"`
 }
 
 func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
-	log.Log.Sugar().Infof("Received pin message with body length: %d", len(body))
-	var req requestMessage
+	var req PinRequestMsg
 	if err := json.Unmarshal(body, &req); err != nil {
 		log.Log.Sugar().Errorf("Failed to unmarshal request message: %v", err)
 		return err
@@ -66,20 +65,17 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 
 	now := time.Now().UnixMilli()
 
-	// Ensure record exists and size is updated using Upsert
 	rec, _, err := w.store.Upsert(ctx, cid,
 		func(r *store.PinRecord) {
 			r.Cid = cid
 			r.Status = store.StatusReceived
 			r.ReceivedAt = now
 			r.LastUpdateAt = now
-			r.SizeBytes = req.Size
+			r.Size = req.Size
 		},
 		func(r *store.PinRecord) error {
-			if req.Size > 0 && r.SizeBytes != req.Size {
-				r.SizeBytes = req.Size
-				r.LastUpdateAt = now
-			}
+			r.Size = req.Size
+			r.LastUpdateAt = now
 			return nil
 		},
 	)
@@ -88,14 +84,12 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	// Determine size for TTL
-	size := rec.GetSizeBytes()
+	size := rec.GetSize()
 	if req.Size > 0 {
 		size = req.Size
 	}
 
-	// Transition to Pinning
-	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
+	if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusPinning
 		r.PinStartAt = time.Now().UnixMilli()
 		return nil
@@ -124,7 +118,7 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	log.Log.Sugar().Infof("Successfully pinned CID: %s", cid)
 
 	t := time.Now()
-	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
+	if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
 		r.PinSucceededAt = t.UnixMilli()
 		r.ExpireAt = t.Add(ttl).UnixMilli()

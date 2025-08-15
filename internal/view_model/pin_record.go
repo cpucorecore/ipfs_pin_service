@@ -19,7 +19,7 @@ type PinRecordView struct {
 	UnpinStartAt      string `json:"unpin_start_at,omitempty"`
 	UnpinSucceededAt  string `json:"unpin_succeeded_at,omitempty"`
 	LastUpdateAt      string `json:"last_update_at"`
-	SizeBytes         int64  `json:"size_bytes"`
+	Size              int64  `json:"size"`
 	SizeHuman         string `json:"size_human"`
 	PinAttemptCount   int32  `json:"pin_attempt_count"`
 	UnpinAttemptCount int32  `json:"unpin_attempt_count"`
@@ -36,8 +36,8 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 		Status:            TranslateStatus(r.Status),
 		ReceivedAt:        FormatTime(receivedAt, timeFormat),
 		LastUpdateAt:      FormatTime(time.UnixMilli(r.LastUpdateAt), timeFormat),
-		SizeBytes:         r.SizeBytes,
-		SizeHuman:         FormatBytes(r.SizeBytes),
+		Size:              r.Size,
+		SizeHuman:         FormatBytes(r.Size),
 		PinAttemptCount:   r.PinAttemptCount,
 		UnpinAttemptCount: r.UnpinAttemptCount,
 	}
@@ -95,9 +95,7 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 			view.Age = FormatDuration(now.Sub(time.UnixMilli(r.PinSucceededAt)))
 		}
 	case store.StatusFiltered:
-		if r.SizeBytes > 0 {
-			view.Age = fmt.Sprintf("Filtered due to size limit: %s", FormatBytes(r.SizeBytes))
-		}
+		view.Age = fmt.Sprintf("Filtered due to size limit: %s", FormatBytes(r.SizeLimit))
 	default:
 		view.Age = ""
 	}

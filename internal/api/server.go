@@ -66,60 +66,50 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 	}
 
-	if s.filter.ShouldFilter(size) {
-		rec, _, err := s.store.Upsert(c, cidStr,
-			func(r *store.PinRecord) {
-				now := time.Now().UnixMilli()
-				r.Cid = cidStr
-				r.ReceivedAt = now
-				r.LastUpdateAt = now
-				if size > 0 {
-					r.SizeBytes = size
-				}
-			},
-			func(r *store.PinRecord) error {
-				r.Status = store.StatusFiltered
-				r.FilterSizeLimit = s.filter.SizeLimit()
-				r.LastUpdateAt = time.Now().UnixMilli()
-				return nil
-			},
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-		return
-	}
-
-	rec, _, err := s.store.Upsert(c, cidStr,
-		func(r *store.PinRecord) {
-			now := time.Now().UnixMilli()
-			r.Cid = cidStr
-			r.Status = store.StatusReceived
-			r.ReceivedAt = now
-			r.LastUpdateAt = now
-			if size > 0 {
-				r.SizeBytes = size
-			}
-		},
-		nil,
-	)
+	rec, err := s.store.Get(c, cidStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if rec.Status == store.StatusPinning {
-		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+	now := time.Now().UnixMilli()
+	if rec == nil {
+		rec = &store.PinRecord{
+			Cid:          cidStr,
+			Status:       store.StatusReceived,
+			ReceivedAt:   now,
+			LastUpdateAt: now,
+		}
+		if size > 0 {
+			rec.Size = size
+		}
+	}
+
+	if s.filter.ShouldFilter(size) {
+		rec.Status = store.StatusFiltered
+		rec.SizeLimit = s.filter.SizeLimit()
+		rec.LastUpdateAt = now
+
+		if err = s.store.Put(c, rec); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 		return
 	}
 
-	body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
+	body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.Size})
 	if err = s.queue.Enqueue(c, "pin.exchange", body); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	if err = s.store.Put(c, rec); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 }
 

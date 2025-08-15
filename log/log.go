@@ -2,11 +2,9 @@ package log
 
 import (
 	"fmt"
-	"os"
-	"time"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"os"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 )
@@ -25,8 +23,8 @@ func InitLoggerWithConfig(cfg *config.Config) {
 	}
 
 	buffer := &zapcore.BufferedWriteSyncer{
-		Size:          cfg.Log.BufferSize,
-		FlushInterval: time.Second * time.Duration(cfg.Log.FlushInterval),
+		Size:          int(cfg.Log.BufferSize.Int64()),
+		FlushInterval: cfg.Log.FlushInterval,
 		WS:            os.Stdout,
 	}
 	writeSyncer := zapcore.AddSync(buffer)

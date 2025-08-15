@@ -11,8 +11,8 @@ type Config struct {
 	Log struct {
 		Level         string        `yaml:"level"`
 		Async         bool          `yaml:"async"`
-		BufferSize    int           `yaml:"buffer_size"`
-		FlushInterval time.Duration `yaml:"flush_interval"` // seconds
+		BufferSize    FileSize      `yaml:"buffer_size"`
+		FlushInterval time.Duration `yaml:"flush_interval"`
 	} `yaml:"log"`
 	HTTP struct {
 		Port int `yaml:"port"`
@@ -33,7 +33,6 @@ type Config struct {
 			RetryQueue string        `yaml:"retry_queue"`
 			RetryDelay time.Duration `yaml:"retry_delay"`
 		} `yaml:"pin"`
-		// Request removed; using pin.exchange for both HTTP and MQ direct requests
 		Unpin struct {
 			Exchange   string        `yaml:"exchange"`
 			Queue      string        `yaml:"queue"`
@@ -56,8 +55,8 @@ type Config struct {
 	} `yaml:"gc"`
 
 	TTLChecker struct {
-		Interval  time.Duration `yaml:"interval"`   // TTL 检查间隔
-		BatchSize int           `yaml:"batch_size"` // 每次检查的记录数量
+		Interval  time.Duration `yaml:"interval"`
+		BatchSize int           `yaml:"batch_size"`
 	} `yaml:"ttl_checker"`
 
 	TTL struct {
@@ -80,7 +79,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := &Config{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err = yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
 

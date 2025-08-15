@@ -15,8 +15,8 @@ message PinRecord {
     int64 unpin_start_at = 9;
     int64 unpin_succeeded_at = 10;
     int64 last_update_at = 11;
-    int64 size_bytes = 12;
+    int64 size = 12;
     int32 pin_attempt_count = 13;
     int32 unpin_attempt_count = 14;
-    int64 filter_size_limit = 15;
+    int64 size_limit = 15;
 }

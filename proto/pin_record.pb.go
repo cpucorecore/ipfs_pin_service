@@ -34,10 +34,10 @@ type PinRecord struct {
 	UnpinStartAt      int64                  `protobuf:"varint,9,opt,name=unpin_start_at,json=unpinStartAt,proto3" json:"unpin_start_at,omitempty"`
 	UnpinSucceededAt  int64                  `protobuf:"varint,10,opt,name=unpin_succeeded_at,json=unpinSucceededAt,proto3" json:"unpin_succeeded_at,omitempty"`
 	LastUpdateAt      int64                  `protobuf:"varint,11,opt,name=last_update_at,json=lastUpdateAt,proto3" json:"last_update_at,omitempty"`
-	SizeBytes         int64                  `protobuf:"varint,12,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Size              int64                  `protobuf:"varint,12,opt,name=size,proto3" json:"size,omitempty"`
 	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
 	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
-	FilterSizeLimit   int64                  `protobuf:"varint,15,opt,name=filter_size_limit,json=filterSizeLimit,proto3" json:"filter_size_limit,omitempty"`
+	SizeLimit         int64                  `protobuf:"varint,15,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -149,9 +149,9 @@ func (x *PinRecord) GetLastUpdateAt() int64 {
 	return 0
 }
 
-func (x *PinRecord) GetSizeBytes() int64 {
+func (x *PinRecord) GetSize() int64 {
 	if x != nil {
-		return x.SizeBytes
+		return x.Size
 	}
 	return 0
 }
@@ -170,9 +170,9 @@ func (x *PinRecord) GetUnpinAttemptCount() int32 {
 	return 0
 }
 
-func (x *PinRecord) GetFilterSizeLimit() int64 {
+func (x *PinRecord) GetSizeLimit() int64 {
 	if x != nil {
-		return x.FilterSizeLimit
+		return x.SizeLimit
 	}
 	return 0
 }
@@ -181,7 +181,7 @@ var File_proto_pin_record_proto protoreflect.FileDescriptor
 
 const file_proto_pin_record_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/pin_record.proto\x12\x03ipm\"\xad\x04\n" +
+	"\x16proto/pin_record.proto\x12\x03ipm\"\x95\x04\n" +
 	"\tPinRecord\x12\x10\n" +
 	"\x03cid\x18\x01 \x01(\tR\x03cid\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x1f\n" +
@@ -197,12 +197,12 @@ const file_proto_pin_record_proto_rawDesc = "" +
 	"\x0eunpin_start_at\x18\t \x01(\x03R\funpinStartAt\x12,\n" +
 	"\x12unpin_succeeded_at\x18\n" +
 	" \x01(\x03R\x10unpinSucceededAt\x12$\n" +
-	"\x0elast_update_at\x18\v \x01(\x03R\flastUpdateAt\x12\x1d\n" +
-	"\n" +
-	"size_bytes\x18\f \x01(\x03R\tsizeBytes\x12*\n" +
+	"\x0elast_update_at\x18\v \x01(\x03R\flastUpdateAt\x12\x12\n" +
+	"\x04size\x18\f \x01(\x03R\x04size\x12*\n" +
 	"\x11pin_attempt_count\x18\r \x01(\x05R\x0fpinAttemptCount\x12.\n" +
-	"\x13unpin_attempt_count\x18\x0e \x01(\x05R\x11unpinAttemptCount\x12*\n" +
-	"\x11filter_size_limit\x18\x0f \x01(\x03R\x0ffilterSizeLimitB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
+	"\x13unpin_attempt_count\x18\x0e \x01(\x05R\x11unpinAttemptCount\x12\x1d\n" +
+	"\n" +
+	"size_limit\x18\x0f \x01(\x03R\tsizeLimitB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
 
 var (
 	file_proto_pin_record_proto_rawDescOnce sync.Once
