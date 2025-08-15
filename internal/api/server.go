@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
@@ -14,8 +15,9 @@ import (
 )
 
 type Server struct {
-	store Store
-	queue MessageQueue
+	store  Store
+	queue  MessageQueue
+	filter *filter.Filter
 }
 
 type Store interface {
@@ -28,10 +30,11 @@ type MessageQueue interface {
 	Enqueue(ctx context.Context, topic string, body []byte) error
 }
 
-func NewServer(store Store, queue MessageQueue) *Server {
+func NewServer(store Store, queue MessageQueue, f *filter.Filter) *Server {
 	return &Server{
-		store: store,
-		queue: queue,
+		store:  store,
+		queue:  queue,
+		filter: f,
 	}
 }
 
@@ -97,7 +100,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	}
 
 	// Existing record handling
-	switch store.Status(rec.Status) {
+	switch rec.Status {
 	case store.StatusActive:
 		// Refresh TTL via worker
 		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
@@ -119,6 +122,18 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+	}
+
+	if s.filter != nil && s.filter.ShouldFilter(size) {
+		rec.Status = store.StatusFiltered
+		rec.FilterSizeLimit = s.filter.SizeLimit()
+		rec.LastUpdateAt = time.Now().UnixMilli()
+		if err = s.store.Put(c, rec); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+		return
 	}
 }
 

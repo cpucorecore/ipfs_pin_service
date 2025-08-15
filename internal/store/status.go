@@ -13,4 +13,5 @@ const (
 	StatusUnpinning
 	StatusUnpinSucceeded
 	StatusDeadLetter
+	StatusFiltered
 )

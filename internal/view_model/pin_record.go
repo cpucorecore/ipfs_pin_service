@@ -94,6 +94,10 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 		if r.PinSucceededAt > 0 {
 			view.Age = FormatDuration(now.Sub(time.UnixMilli(r.PinSucceededAt)))
 		}
+	case store.StatusFiltered:
+		if r.SizeBytes > 0 {
+			view.Age = fmt.Sprintf("Filtered due to size limit: %s", FormatBytes(r.SizeBytes))
+		}
 	default:
 		view.Age = ""
 	}
@@ -119,6 +123,8 @@ func TranslateStatus(status store.Status) string {
 		return "UnpinSucceeded"
 	case store.StatusDeadLetter:
 		return "DeadLetter"
+	case store.StatusFiltered:
+		return "Filtered"
 	default:
 		return "Unknown"
 	}

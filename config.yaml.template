@@ -12,6 +12,11 @@ ipfs:
   http_timeout: "30m"     # 单个HTTP请求超时
   dial_timeout: "60s"     # 建连超时
 
+# 请求过滤配置：当客户端声明的 size 超过 size_limit 时将被过滤
+# 0 或未配置表示不过滤；支持人类可读格式："100K", "5M", "1.5G", 也支持 KB/MB/GiB 等
+filter:
+  size_limit: 0            # 如 104857600, "100M", "500KiB"
+
 rabbitmq:
   url: "amqp://guest:guest@127.0.0.1:5672/"
   prefetch: 32

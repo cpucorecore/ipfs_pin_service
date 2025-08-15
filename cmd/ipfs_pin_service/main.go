@@ -12,6 +12,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/api"
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
@@ -58,7 +59,8 @@ func main() {
 	policy := ttl.NewPolicy(cfg)
 
 	// 创建 HTTP 服务器
-	server := api.NewServer(st, mq)
+	f := filter.New(cfg)
+	server := api.NewServer(st, mq, f)
 	router := gin.Default()
 	server.Routes(router)
 	monitor.RegisterMetricsRoute(router)

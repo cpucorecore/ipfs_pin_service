@@ -67,6 +67,10 @@ type Config struct {
 			TTL     time.Duration `yaml:"ttl"`
 		} `yaml:"table"`
 	} `yaml:"ttl"`
+
+	Filter struct {
+		SizeLimit FileSize `yaml:"size_limit"`
+	} `yaml:"filter"`
 }
 
 func Load(path string) (*Config, error) {

@@ -78,6 +78,16 @@ var (
 
 	// IPFS availability
 	ipfsAvailable = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_available"})
+
+	// Filter metrics
+	filterSizeLimitGauge = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_filter_size_limit_bytes"})
+	filterTotal          = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "ipfs_filter_total"},
+		[]string{"result"}, // filtered|accepted
+	)
+	filterRequestSize = prometheus.NewHistogram(
+		prometheus.HistogramOpts{Name: "ipfs_filter_request_size_bytes", Buckets: prometheus.ExponentialBuckets(1024, 2, 20)},
+	)
 )
 
 func init() {
@@ -99,6 +109,9 @@ func init() {
 		bsDupBlocksReceived,
 		bsDupDataReceived,
 		bsMessagesReceived,
+		filterSizeLimitGauge,
+		filterTotal,
+		filterRequestSize,
 	)
 }
 
@@ -169,4 +182,25 @@ func ObserveTTLBucket(bucket string) {
 		bucket = "unknown"
 	}
 	ttlBucketCounter.WithLabelValues(bucket).Inc()
+}
+
+// SetFilterSizeLimit sets current filter size limit gauge (bytes).
+func SetFilterSizeLimit(limit int64) {
+	if limit < 0 {
+		limit = 0
+	}
+	filterSizeLimitGauge.Set(float64(limit))
+}
+
+// ObserveFilter records one filter decision with request size.
+// filtered=true increments result=filtered, else result=accepted.
+func ObserveFilter(size int64, filtered bool) {
+	if size > 0 {
+		filterRequestSize.Observe(float64(size))
+	}
+	result := "accepted"
+	if filtered {
+		result = "filtered"
+	}
+	filterTotal.WithLabelValues(result).Inc()
 }

@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package ipm;
-option go_package = "github.com/cpucorecore/ipfs_pin_service/internal/model";
+option go_package = "github.com/cpucorecore/ipfs_pin_service/proto";
 
 message PinRecord {
     string cid = 1;
@@ -18,4 +18,5 @@ message PinRecord {
     int64 size_bytes = 12;
     int32 pin_attempt_count = 13;
     int32 unpin_attempt_count = 14;
+    int64 filter_size_limit = 15;
 }
