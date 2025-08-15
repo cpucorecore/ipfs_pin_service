@@ -48,18 +48,16 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Mark as Unpinning
-	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinning
 		r.UnpinStartAt = time.Now().UnixMilli()
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}
 
 	// Execute unpin
-	// Add per-operation timeout if configured
 	ctxUnpin := ctx
 	var cancel context.CancelFunc
 	if w.cfg.Workers.UnpinTimeout > 0 {
@@ -67,27 +65,21 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		defer cancel()
 	}
 	start := time.Now()
-	err = w.ipfs.PinRm(ctxUnpin, cid)
+	err := w.ipfs.PinRm(ctxUnpin, cid)
 	monitor.ObserveOperation(monitor.OpPinRm, time.Since(start), err)
 	if err != nil {
 		if err.Error() == "pin/rm: not pinned or pinned indirectly" {
-			// Not pinned already; treat as success
 			log.Log.Sugar().Infof("CID %s is already unpinned", cid)
-			// Mark as UnpinSucceeded
-			err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+			if _, _, e := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 				r.Status = store.StatusUnpinSucceeded
 				r.UnpinSucceededAt = time.Now().UnixMilli()
 				return nil
-			})
-			if err != nil {
-				log.Log.Sugar().Errorf("Failed to update record status: %v", err)
-				return err
+			}); e != nil {
+				log.Log.Sugar().Errorf("Failed to update record status: %v", e)
+				return e
 			}
-
-			// Delete expire index entry
-			if err := w.store.DeleteExpireIndex(ctx, cid); err != nil {
-				log.Log.Sugar().Errorf("Failed to delete expire index for %s: %v", cid, err)
-				// Log only; main action succeeded
+			if e := w.store.DeleteExpireIndex(ctx, cid); e != nil {
+				log.Log.Sugar().Errorf("Failed to delete expire index for %s: %v", cid, e)
 			}
 			return nil
 		}
@@ -95,20 +87,17 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	}
 
 	// Mark as UnpinSucceeded
-	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinSucceeded
 		r.UnpinSucceededAt = time.Now().UnixMilli()
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}
 
-	// Delete expire index entry
 	if err = w.store.DeleteExpireIndex(ctx, cid); err != nil {
 		log.Log.Sugar().Errorf("Failed to delete expire index for %s: %v", cid, err)
-		// Log only; main action succeeded
 	}
 
 	return nil
@@ -117,21 +106,16 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, err error) error {
 	log.Log.Sugar().Errorf("Unpin operation failed for %s: %v", cid, err)
 
-	// Update attempt count and decide whether to retry or dead-letter
-	updateErr := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	if e := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.UnpinAttemptCount++
-
 		if r.UnpinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
 			r.Status = store.StatusDeadLetter
 			return nil
 		}
-
-		// schedule for retry
 		r.Status = store.StatusScheduledForUnpin
 		return nil
-	})
-	if updateErr != nil {
-		return updateErr
+	}); e != nil {
+		return e
 	}
 
 	rec, _ := w.store.Get(ctx, cid)

@@ -179,6 +179,67 @@ func (s *PebbleStore) Close() error {
 	return s.db.Close()
 }
 
+// Upsert gets the record by cid; if missing, init is called to populate a new record.
+// Then apply is invoked to mutate, and the record is persisted with indices.
+func (s *PebbleStore) Upsert(ctx context.Context, cid string, init func(*PinRecord), apply func(*PinRecord) error) (*PinRecord, bool, error) {
+	rec, err := s.Get(ctx, cid)
+	if err != nil {
+		return nil, false, err
+	}
+	created := false
+	if rec == nil {
+		rec = &pb.PinRecord{}
+		if init != nil {
+			init(rec)
+		}
+		created = true
+	}
+
+	oldStatus := rec.Status
+	oldLastUpdateAt := rec.LastUpdateAt
+	oldExpire := rec.ExpireAt
+
+	if apply != nil {
+		if err := apply(rec); err != nil {
+			return nil, created, err
+		}
+	}
+
+	batch := s.db.NewBatch()
+	defer batch.Close()
+
+	if !created {
+		if err := batch.Delete(makeStatusKey(oldStatus, oldLastUpdateAt, cid), nil); err != nil {
+			return nil, created, err
+		}
+		if oldExpire > 0 {
+			if err := batch.Delete(makeExpireKey(oldExpire, cid), nil); err != nil {
+				return nil, created, err
+			}
+		}
+	}
+
+	data, err := proto.Marshal(rec)
+	if err != nil {
+		return nil, created, err
+	}
+	if err := batch.Set(makePinRecordKey(cid), data, nil); err != nil {
+		return nil, created, err
+	}
+	if err := batch.Set(makeStatusKey(rec.Status, rec.LastUpdateAt, cid), nil, nil); err != nil {
+		return nil, created, err
+	}
+	if rec.ExpireAt > 0 {
+		if err := batch.Set(makeExpireKey(rec.ExpireAt, cid), nil, nil); err != nil {
+			return nil, created, err
+		}
+	}
+	if err := batch.Commit(pebble.Sync); err != nil {
+		return nil, created, err
+	}
+	return rec, created, nil
+}
+
 // Iterator implementation
 type pebbleIterator struct {
 	iter    *pebble.Iterator

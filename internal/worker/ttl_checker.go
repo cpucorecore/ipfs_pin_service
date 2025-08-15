@@ -16,16 +16,8 @@ type TTLChecker struct {
 	cfg   *config.Config
 }
 
-func NewTTLChecker(
-	store store.Store,
-	queue queue.MessageQueue,
-	cfg *config.Config,
-) *TTLChecker {
-	return &TTLChecker{
-		store: store,
-		queue: queue,
-		cfg:   cfg,
-	}
+func NewTTLChecker(store store.Store, queue queue.MessageQueue, cfg *config.Config) *TTLChecker {
+	return &TTLChecker{store: store, queue: queue, cfg: cfg}
 }
 
 func (c *TTLChecker) Start(ctx context.Context) error {
@@ -37,63 +29,36 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := c.checkExpiredRecords(ctx); err != nil {
-				log.Log.Sugar().Errorf("TTL check failed: %v", err)
+			if err := c.checkOnce(ctx); err != nil {
+				log.Log.Sugar().Errorf("TTL check error: %v", err)
 			}
 		}
 	}
 }
 
-func (c *TTLChecker) checkExpiredRecords(ctx context.Context) error {
+func (c *TTLChecker) checkOnce(ctx context.Context) error {
 	now := time.Now().UnixMilli()
-	expiredRecords, err := c.store.IndexByExpireBefore(ctx, now, c.cfg.TTLChecker.BatchSize)
+	cids, err := c.store.IndexByExpireBefore(ctx, now, c.cfg.TTLChecker.BatchSize)
 	if err != nil {
-		log.Log.Sugar().Errorf("Failed to get expired records: %v", err)
 		return err
 	}
 
-	log.Log.Sugar().Infof("ttl: Found %d expired records", len(expiredRecords))
-
-	processedCount := 0
-	for _, cid := range expiredRecords {
+	for _, cid := range cids {
 		rec, err := c.store.Get(ctx, cid)
 		if err != nil {
-			log.Log.Sugar().Errorf("Failed to get record %s: %v", cid, err)
-			continue
+			return err
 		}
 		if rec == nil {
 			continue
 		}
 
-		// Only process Active records
-		if store.Status(rec.Status) != store.StatusActive {
-			continue
-		}
-
-		// Mark as ScheduledForUnpin
-		err = c.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		if err := c.store.Update(ctx, cid, func(r *store.PinRecord) error {
 			r.Status = store.StatusScheduledForUnpin
-			r.ScheduleUnpinAt = now
+			r.ScheduleUnpinAt = time.Now().UnixMilli()
 			return nil
-		})
-		if err != nil {
-			log.Log.Sugar().Errorf("Failed to update record %s: %v", cid, err)
-			continue
+		}); err != nil {
+			return err
 		}
-
-		// Enqueue only CID to unpin queue
-		if err := c.queue.Enqueue(ctx, c.cfg.RabbitMQ.Unpin.Exchange, []byte(cid)); err != nil {
-			log.Log.Sugar().Errorf("Failed to enqueue record %s: %v", cid, err)
-			continue
-		}
-
-		processedCount++
-		log.Log.Sugar().Infof("Scheduled record %s for unpin", cid)
 	}
-
-	if processedCount > 0 {
-		log.Log.Sugar().Infof("TTL check completed: processed %d expired records", processedCount)
-	}
-
 	return nil
 }

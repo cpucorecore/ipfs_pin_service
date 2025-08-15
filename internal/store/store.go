@@ -12,6 +12,7 @@ type Store interface {
 	IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error)
 	DeleteExpireIndex(ctx context.Context, cid string) error
 	Close() error
+	Upsert(ctx context.Context, cid string, init func(*PinRecord), apply func(*PinRecord) error) (*PinRecord, bool, error)
 }
 
 type Iterator[T any] interface {

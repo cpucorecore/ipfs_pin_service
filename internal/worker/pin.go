@@ -66,33 +66,26 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 
 	now := time.Now().UnixMilli()
 
-	// Upsert record to ensure existence and size availability
-	rec, err := w.store.Get(ctx, cid)
-	if err != nil {
-		log.Log.Sugar().Errorf("Failed to get record %s: %v", cid, err)
-		return err
-	}
-	if rec == nil {
-		rec = &store.PinRecord{
-			Cid:          cid,
-			Status:       store.StatusReceived,
-			ReceivedAt:   now,
-			LastUpdateAt: now,
-			SizeBytes:    req.Size,
-		}
-		if err := w.store.Put(ctx, rec); err != nil {
-			log.Log.Sugar().Errorf("Failed to upsert record %s: %v", cid, err)
-			return err
-		}
-	} else if req.Size > 0 && rec.SizeBytes != req.Size {
-		if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-			r.SizeBytes = req.Size
+	// Ensure record exists and size is updated using Upsert
+	rec, _, err := w.store.Upsert(ctx, cid,
+		func(r *store.PinRecord) {
+			r.Cid = cid
+			r.Status = store.StatusReceived
+			r.ReceivedAt = now
 			r.LastUpdateAt = now
+			r.SizeBytes = req.Size
+		},
+		func(r *store.PinRecord) error {
+			if req.Size > 0 && r.SizeBytes != req.Size {
+				r.SizeBytes = req.Size
+				r.LastUpdateAt = now
+			}
 			return nil
-		}); err != nil {
-			log.Log.Sugar().Errorf("Failed to update size for %s: %v", cid, err)
-			return err
-		}
+		},
+	)
+	if err != nil {
+		log.Log.Sugar().Errorf("Failed to upsert record %s: %v", cid, err)
+		return err
 	}
 
 	// Determine size for TTL
@@ -101,12 +94,12 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		size = req.Size
 	}
 
-	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	// Transition to Pinning
+	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusPinning
 		r.PinStartAt = time.Now().UnixMilli()
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}
@@ -131,13 +124,12 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 	log.Log.Sugar().Infof("Successfully pinned CID: %s", cid)
 
 	t := time.Now()
-	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
 		r.PinSucceededAt = t.UnixMilli()
 		r.ExpireAt = t.Add(ttl).UnixMilli()
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
 		return err
 	}

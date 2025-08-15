@@ -24,6 +24,7 @@ type Store interface {
 	Get(ctx context.Context, cid string) (*store.PinRecord, error)
 	Put(ctx context.Context, rec *store.PinRecord) error
 	Update(ctx context.Context, cid string, apply func(*store.PinRecord) error) error
+	Upsert(ctx context.Context, cid string, init func(*store.PinRecord), apply func(*store.PinRecord) error) (*store.PinRecord, bool, error)
 }
 
 type MessageQueue interface {
@@ -65,109 +66,61 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 	}
 
-	rec, err := s.store.Get(c, cidStr)
+	if s.filter.ShouldFilter(size) {
+		rec, _, err := s.store.Upsert(c, cidStr,
+			func(r *store.PinRecord) {
+				now := time.Now().UnixMilli()
+				r.Cid = cidStr
+				r.ReceivedAt = now
+				r.LastUpdateAt = now
+				if size > 0 {
+					r.SizeBytes = size
+				}
+			},
+			func(r *store.PinRecord) error {
+				r.Status = store.StatusFiltered
+				r.FilterSizeLimit = s.filter.SizeLimit()
+				r.LastUpdateAt = time.Now().UnixMilli()
+				return nil
+			},
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+		return
+	}
+
+	rec, _, err := s.store.Upsert(c, cidStr,
+		func(r *store.PinRecord) {
+			now := time.Now().UnixMilli()
+			r.Cid = cidStr
+			r.Status = store.StatusReceived
+			r.ReceivedAt = now
+			r.LastUpdateAt = now
+			if size > 0 {
+				r.SizeBytes = size
+			}
+		},
+		nil,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Apply filter immediately after parsing size
-	if s.filter != nil && s.filter.ShouldFilter(size) {
-		now := time.Now().UnixMilli()
-		if rec == nil {
-			rec = &store.PinRecord{
-				Cid:          cidStr,
-				Status:       store.StatusFiltered,
-				ReceivedAt:   now,
-				LastUpdateAt: now,
-			}
-			if size > 0 {
-				rec.SizeBytes = size
-			}
-			rec.FilterSizeLimit = s.filter.SizeLimit()
-			if err = s.store.Put(c, rec); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-		} else {
-			now := time.Now().UnixMilli()
-			if err := s.store.Update(c, cidStr, func(pr *store.PinRecord) error {
-				pr.Status = store.StatusFiltered
-				pr.FilterSizeLimit = s.filter.SizeLimit()
-				if size > 0 {
-					pr.SizeBytes = size
-				}
-				pr.LastUpdateAt = now
-				return nil
-			}); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			// reflect updates for response
-			rec.Status = store.StatusFiltered
-			rec.FilterSizeLimit = s.filter.SizeLimit()
-			if size > 0 {
-				rec.SizeBytes = size
-			}
-			rec.LastUpdateAt = now
-		}
-
-		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-		return
-	}
-
-	if rec == nil {
-		now := time.Now().UnixMilli()
-		rec = &store.PinRecord{
-			Cid:          cidStr,
-			Status:       store.StatusReceived,
-			ReceivedAt:   now,
-			LastUpdateAt: now,
-		}
-		// If client provided size, persist it
-		if size > 0 {
-			rec.SizeBytes = size
-		}
-		if err = s.store.Put(c, rec); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Enqueue minimal payload (cid, size)
-		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
-		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
+	if rec.Status == store.StatusPinning {
 		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 		return
 	}
 
-	// Existing record handling
-	switch rec.Status {
-	case store.StatusActive:
-		// Refresh TTL via worker
-		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
-		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-
-	case store.StatusPinning:
-		// Already processing; return
-		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-
-	default:
-		// Requeue for processing
-		body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
-		if err := s.queue.Enqueue(c, "pin.exchange", body); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+	body, _ := json.Marshal(gin.H{"cid": cidStr, "size": rec.SizeBytes})
+	if err = s.queue.Enqueue(c, "pin.exchange", body); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+	c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 }
 
 func (s *Server) handleGetPin(c *gin.Context) {
@@ -181,7 +134,6 @@ func (s *Server) handleGetPin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
 	}
 
-	// Parse time_format parameter
 	timeFormat := c.DefaultQuery("time_format", string(view_model.TimeFormatISO))
 	var format view_model.TimeFormat
 	switch timeFormat {
