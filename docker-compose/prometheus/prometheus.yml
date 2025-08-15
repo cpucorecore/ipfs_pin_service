@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # IPFS Pin Service 监控
+  - job_name: 'ipfs-pin-service'
+    static_configs:
+      - targets: ['host.docker.internal:8081']  # 从容器内访问宿主机
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: true
+
+  # RabbitMQ 监控 (可选，如果需要监控 RabbitMQ 指标)
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']  # RabbitMQ Exporter 端口
+    scrape_interval: 30s
