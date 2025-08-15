@@ -312,3 +312,61 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 		t.Fatalf("unexpected limited order: got %v want %v", got, expectedLimited)
 	}
 }
+
+func newTestStore(t *testing.T) *PebbleStore {
+	db, err := pebble.Open(t.TempDir(), &pebble.Options{})
+	if err != nil {
+		t.Fatalf("open pebble: %v", err)
+	}
+	return &PebbleStore{db: db}
+}
+
+func TestUpsert_CreateAndUpdate(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	cid := "cid1"
+	rec, created, err := st.Upsert(ctx, cid,
+		func(r *PinRecord) {
+			r.Cid = cid
+			r.Status = StatusReceived
+			r.LastUpdateAt = 1
+		},
+		nil,
+	)
+	if err != nil || !created || rec == nil {
+		t.Fatalf("create upsert failed: created=%v err=%v", created, err)
+	}
+
+	// Update
+	rec2, created2, err := st.Upsert(ctx, cid, nil, func(r *PinRecord) error {
+		r.Status = StatusPinning
+		r.LastUpdateAt = 2
+		return nil
+	})
+	if err != nil || created2 {
+		t.Fatalf("update upsert failed: created=%v err=%v", created2, err)
+	}
+	if rec2.Status != StatusPinning || rec2.LastUpdateAt != 2 {
+		t.Fatalf("unexpected fields after update")
+	}
+}
+
+func TestUpsert_SkipWhenUnchanged(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	cid := "cid2"
+	_, _, err := st.Upsert(ctx, cid, func(r *PinRecord) {
+		r.Cid = cid
+		r.Status = StatusReceived
+		r.LastUpdateAt = 1
+	}, nil)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	// unchanged
+	_, _, err = st.Upsert(ctx, cid, nil, func(r *PinRecord) error { return nil })
+	if err != nil {
+		t.Fatalf("unchanged upsert should not error: %v", err)
+	}
+}
