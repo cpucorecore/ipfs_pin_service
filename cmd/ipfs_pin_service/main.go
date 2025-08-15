@@ -25,7 +25,13 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
+	showVersion := flag.Bool("v", false, "Show version information")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(GetVersion())
+		os.Exit(0)
+	}
 
 	log.InitLoggerForTest()
 

@@ -158,7 +158,7 @@ func RecordBitswapStat(
 
 // RegisterMetricsRoute exposes Prometheus metrics at /metrics on the given gin router.
 func RegisterMetricsRoute(r *gin.Engine) {
-	r.Any("/metrics", gin.WrapH(promhttp.Handler()))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
 // SetQueueStats sets queue gauges for a named queue.

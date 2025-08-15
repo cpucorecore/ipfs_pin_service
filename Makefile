@@ -3,8 +3,19 @@
 # 设置 Go 编译器和标志
 GO := go
 BINARY_NAME := ipfs_pin_service
-MAIN_PATH := ./cmd/ipfs_pin_service/main.go
+MAIN_PATH := ./cmd/ipfs_pin_service
 BIN_DIR := bin
+
+# 版本信息
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+BRANCH  ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS := -s -w \
+           -X 'main.Version=$(VERSION)' \
+           -X 'main.GitBranch=$(BRANCH)' \
+           -X 'main.GitCommit=$(COMMIT)' \
+           -X 'main.BuildTime=$(BUILD_TIME)'
 
 # protoc 编译器和选项
 PROTOC := protoc
@@ -17,7 +28,7 @@ all: proto build
 # 编译二进制文件
 build:
 	mkdir -p $(BIN_DIR)
-	$(GO) build -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 
 # 生成 protobuf 代码
 proto:
