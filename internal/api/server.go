@@ -71,6 +71,51 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
+	// Apply filter immediately after parsing size
+	if s.filter != nil && s.filter.ShouldFilter(size) {
+		now := time.Now().UnixMilli()
+		if rec == nil {
+			rec = &store.PinRecord{
+				Cid:          cidStr,
+				Status:       store.StatusFiltered,
+				ReceivedAt:   now,
+				LastUpdateAt: now,
+			}
+			if size > 0 {
+				rec.SizeBytes = size
+			}
+			rec.FilterSizeLimit = s.filter.SizeLimit()
+			if err = s.store.Put(c, rec); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			now := time.Now().UnixMilli()
+			if err := s.store.Update(c, cidStr, func(pr *store.PinRecord) error {
+				pr.Status = store.StatusFiltered
+				pr.FilterSizeLimit = s.filter.SizeLimit()
+				if size > 0 {
+					pr.SizeBytes = size
+				}
+				pr.LastUpdateAt = now
+				return nil
+			}); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// reflect updates for response
+			rec.Status = store.StatusFiltered
+			rec.FilterSizeLimit = s.filter.SizeLimit()
+			if size > 0 {
+				rec.SizeBytes = size
+			}
+			rec.LastUpdateAt = now
+		}
+
+		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
+		return
+	}
+
 	if rec == nil {
 		now := time.Now().UnixMilli()
 		rec = &store.PinRecord{
@@ -122,18 +167,6 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusAccepted, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-	}
-
-	if s.filter != nil && s.filter.ShouldFilter(size) {
-		rec.Status = store.StatusFiltered
-		rec.FilterSizeLimit = s.filter.SizeLimit()
-		rec.LastUpdateAt = time.Now().UnixMilli()
-		if err = s.store.Put(c, rec); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
-		return
 	}
 }
 

@@ -27,7 +27,6 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	flag.Parse()
 
-	// Initialize a development logger early to log config load errors
 	log.InitLoggerForTest()
 
 	cfg, err := config.Load(*configPath)
@@ -35,37 +34,28 @@ func main() {
 		log.Log.Sugar().Fatalf("Failed to load config: %v", err)
 	}
 
-	// 初始化日志
 	log.InitLoggerWithConfig(cfg)
 
-	// 创建存储
 	st, err := store.NewPebbleStore(".db")
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create store: %v", err)
 	}
 	defer st.Close()
 
-	// 创建消息队列
 	mq, err := queue.NewRabbitMQ(cfg)
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create queue: %v", err)
 	}
 	defer mq.Close()
 
-	// 创建 IPFS 客户端
-	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
-
-	// 创建 TTL 策略
-	policy := ttl.NewPolicy(cfg)
-
-	// 创建 HTTP 服务器
 	f := filter.New(cfg)
 	server := api.NewServer(st, mq, f)
 	router := gin.Default()
 	server.Routes(router)
 	monitor.RegisterMetricsRoute(router)
 
-	// 创建 workers
+	policy := ttl.NewPolicy(cfg)
+	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
 	pinWorker := worker.NewPinWorker(st, mq, ipfsClient, policy, cfg)
 	unpinWorker := worker.NewUnpinWorker(st, mq, ipfsClient, cfg)
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
@@ -75,11 +65,9 @@ func main() {
 	ipfsHealth := worker.NewIPFSHealthWorker(ipfsClient, cfg)
 	ttlChecker := worker.NewTTLChecker(st, mq, cfg)
 
-	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 启动 workers
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -93,7 +81,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := unpinWorker.Start(ctx); err != nil {
+		if err = unpinWorker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Unpin worker stopped: %v", err)
 		}
 	}()
@@ -133,7 +121,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := queueMonitor.Start(ctx); err != nil {
+		if err = queueMonitor.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Queue monitor stopped: %v", err)
 		}
 	}()
@@ -141,31 +129,28 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := ipfsHealth.Start(ctx); err != nil {
+		if err = ipfsHealth.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("IPFS health worker stopped: %v", err)
 		}
 	}()
 
-	// 启动 HTTP 服务器
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTP.Port),
 		Handler: router,
 	}
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Log.Sugar().Errorf("HTTP server error: %v", err)
 		}
 	}()
 
-	// 等待信号
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	// 优雅关闭
 	cancel()
-	if err := srv.Shutdown(context.Background()); err != nil {
+	if err = srv.Shutdown(context.Background()); err != nil {
 		log.Log.Sugar().Errorf("HTTP server shutdown error: %v", err)
 	}
 	wg.Wait()
