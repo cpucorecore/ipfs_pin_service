@@ -20,7 +20,7 @@ func NewStatWorker(ipfs *ipfs.Client, cfg *config.Config) *StatWorker {
 }
 
 func (w *StatWorker) Start(ctx context.Context) error {
-	ticker := time.NewTicker(w.cfg.GC.Interval)
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
 	for {
@@ -38,15 +38,13 @@ func (w *StatWorker) Start(ctx context.Context) error {
 func (w *StatWorker) runStat(ctx context.Context) error {
 	start := time.Now()
 	stat, err := w.ipfs.RepoStat(ctx)
-	monitor.ObserveOperation(monitor.OpRepoStat, time.Since(start), err)
+	monitor.OpDuration.WithLabelValues(monitor.OpRepoStat).Observe(time.Since(start).Seconds())
 	if err != nil {
 		return err
 	}
 	monitor.RecordRepoStat(stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
-	log.Log.Sugar().Infof("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s",
-		stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
-
-	// Queue stats (use MessageQueue Stats via a small helper worker if needed). Here we skip direct call to avoid circular deps.
+	log.Log.Sugar().Infof("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s, api duration=%f seconds",
+		stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version, time.Since(start).Seconds())
 
 	return nil
 }

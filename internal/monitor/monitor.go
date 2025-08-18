@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	opDuration = prometheus.NewHistogramVec(
+	OpDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "ipfs_operation_duration_seconds",
 			Buckets: prometheus.DefBuckets,
@@ -35,11 +35,10 @@ var (
 	fileSizeHist = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "ipfs_pin_file_size_bytes",
-			Buckets: prometheus.ExponentialBuckets(1024, 2, 20),
+			Buckets: prometheus.ExponentialBuckets(1024*200, 2, 20),
 		},
 	)
 
-	// TTL buckets: count of files falling into configured size buckets
 	ttlBucketCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ipfs_ttl_bucket_total",
@@ -47,7 +46,6 @@ var (
 		[]string{"bucket"},
 	)
 
-	// Repo stat gauges
 	repoSizeBytes = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "ipfs_repo_size_bytes",
 	})
@@ -61,7 +59,6 @@ var (
 		Name: "ipfs_repo_info",
 	}, []string{"path", "version"})
 
-	// Bitswap stat gauges
 	bsPeers             = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_peers"})
 	bsWantlist          = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_wantlist"})
 	bsBlocksReceived    = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_blocks_received_total"})
@@ -72,18 +69,15 @@ var (
 	bsDupDataReceived   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_dup_data_received_bytes_total"})
 	bsMessagesReceived  = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_messages_received_total"})
 
-	// Queue gauges
 	queueReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_ready"}, []string{"queue"})
 	queueTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_total"}, []string{"queue"})
 
-	// IPFS availability
 	ipfsAvailable = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_available"})
 
-	// Filter metrics
 	filterSizeLimitGauge = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_filter_size_limit_bytes"})
 	filterTotal          = prometheus.NewCounterVec(
 		prometheus.CounterOpts{Name: "ipfs_filter_total"},
-		[]string{"result"}, // filtered|accepted
+		[]string{"result"},
 	)
 	filterRequestSize = prometheus.NewHistogram(
 		prometheus.HistogramOpts{Name: "ipfs_filter_request_size_bytes", Buckets: prometheus.ExponentialBuckets(1024, 2, 20)},
@@ -92,7 +86,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(
-		opDuration,
+		OpDuration,
 		opTotal,
 		fileSizeHist,
 		ttlBucketCounter,
@@ -115,9 +109,8 @@ func init() {
 	)
 }
 
-// ObserveOperation records duration and success status for an IPFS operation.
 func ObserveOperation(operation string, duration time.Duration, err error) {
-	opDuration.WithLabelValues(operation).Observe(duration.Seconds())
+	OpDuration.WithLabelValues(operation).Observe(duration.Seconds())
 	status := "success"
 	if err != nil {
 		status = "error"
@@ -125,14 +118,12 @@ func ObserveOperation(operation string, duration time.Duration, err error) {
 	opTotal.WithLabelValues(operation, status).Inc()
 }
 
-// ObserveFileSize records observed file size (on successful pin).
 func ObserveFileSize(sizeBytes int64) {
 	if sizeBytes > 0 {
 		fileSizeHist.Observe(float64(sizeBytes))
 	}
 }
 
-// RecordRepoStat exports repo stat metrics. Only call on success.
 func RecordRepoStat(repoSize, storageMax, numObjects int64, path, version string) {
 	repoSizeBytes.Set(float64(repoSize))
 	repoStorageMaxBytes.Set(float64(storageMax))
@@ -140,7 +131,6 @@ func RecordRepoStat(repoSize, storageMax, numObjects int64, path, version string
 	repoInfo.WithLabelValues(path, version).Set(1)
 }
 
-// RecordBitswapStat exports bitswap stat metrics. Only call on success.
 func RecordBitswapStat(
 	peers, wantlist int,
 	blocksReceived, blocksSent, dataReceived, dataSent, dupBlocksReceived, dupDataReceived, messagesReceived uint64,
@@ -156,18 +146,15 @@ func RecordBitswapStat(
 	bsMessagesReceived.Set(float64(messagesReceived))
 }
 
-// RegisterMetricsRoute exposes Prometheus metrics at /metrics on the given gin router.
 func RegisterMetricsRoute(r *gin.Engine) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-// SetQueueStats sets queue gauges for a named queue.
 func SetQueueStats(queueName string, ready, total int64) {
 	queueReady.WithLabelValues(queueName).Set(float64(ready))
 	queueTotal.WithLabelValues(queueName).Set(float64(total))
 }
 
-// SetIPFSAvailable sets IPFS availability gauge to 1 (up) or 0 (down).
 func SetIPFSAvailable(up bool) {
 	if up {
 		ipfsAvailable.Set(1)
@@ -176,7 +163,6 @@ func SetIPFSAvailable(up bool) {
 	}
 }
 
-// ObserveTTLBucket increments the counter for a given policy size bucket label.
 func ObserveTTLBucket(bucket string) {
 	if bucket == "" {
 		bucket = "unknown"
@@ -184,7 +170,6 @@ func ObserveTTLBucket(bucket string) {
 	ttlBucketCounter.WithLabelValues(bucket).Inc()
 }
 
-// SetFilterSizeLimit sets current filter size limit gauge (bytes).
 func SetFilterSizeLimit(limit int64) {
 	if limit < 0 {
 		limit = 0
@@ -192,8 +177,6 @@ func SetFilterSizeLimit(limit int64) {
 	filterSizeLimitGauge.Set(float64(limit))
 }
 
-// ObserveFilter records one filter decision with request size.
-// filtered=true increments result=filtered, else result=accepted.
 func ObserveFilter(size int64, filtered bool) {
 	if size > 0 {
 		filterRequestSize.Observe(float64(size))

@@ -95,7 +95,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := gcWorker.Start(ctx); err != nil {
+		if err = gcWorker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("GC worker stopped: %v", err)
 		}
 	}()
@@ -103,7 +103,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := ttlChecker.Start(ctx); err != nil {
+		if err = ttlChecker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("TTL checker stopped: %v", err)
 		}
 	}()
@@ -111,7 +111,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := statWorker.Start(ctx); err != nil {
+		if err = statWorker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Stat worker stopped: %v", err)
 		}
 	}()
@@ -119,7 +119,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := bitswapStatWorker.Start(ctx); err != nil {
+		if err = bitswapStatWorker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Bitswap stat worker stopped: %v", err)
 		}
 	}()

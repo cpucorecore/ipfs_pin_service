@@ -128,7 +128,6 @@ func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
 		return err
 	}
 
-	// Observe file size for successful pin
 	monitor.ObserveFileSize(size)
 	monitor.ObserveTTLBucket(bucket)
 

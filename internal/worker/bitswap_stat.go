@@ -20,7 +20,7 @@ func NewBitswapStatWorker(ipfs *ipfs.Client, cfg *config.Config) *BitswapStatWor
 }
 
 func (w *BitswapStatWorker) Start(ctx context.Context) error {
-	ticker := time.NewTicker(w.cfg.GC.Interval)
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
 	for {
@@ -38,7 +38,7 @@ func (w *BitswapStatWorker) Start(ctx context.Context) error {
 func (w *BitswapStatWorker) run(ctx context.Context) error {
 	start := time.Now()
 	bs, err := w.ipfs.BitswapStat(ctx)
-	monitor.ObserveOperation(monitor.OpBitswapStat, time.Since(start), err)
+	monitor.OpDuration.WithLabelValues(monitor.OpBitswapStat).Observe(time.Since(start).Seconds())
 	if err != nil {
 		return err
 	}
@@ -49,12 +49,12 @@ func (w *BitswapStatWorker) run(ctx context.Context) error {
 		bs.DupBlksReceived, bs.DupDataReceived,
 		bs.MessagesReceived,
 	)
-	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d",
+	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d. api duration=%f seconds",
 		len(bs.Peers), len(bs.Wantlist),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,
 		bs.DupBlksReceived, bs.DupDataReceived,
-		bs.MessagesReceived,
+		bs.MessagesReceived, time.Since(start).Seconds(),
 	)
 	return nil
 }

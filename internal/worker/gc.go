@@ -42,13 +42,9 @@ func (w *GCWorker) Start(ctx context.Context) error {
 }
 
 func (w *GCWorker) runGC(ctx context.Context) error {
-	// Execute GC only, no repo/stat calls here
 	start := time.Now()
 	err := w.ipfs.RepoGC(ctx)
-	monitor.ObserveOperation(monitor.OpRepoGC, time.Since(start), err)
-	if err != nil {
-		return err
-	}
-	log.Log.Sugar().Infof("GC completed")
-	return nil
+	monitor.OpDuration.WithLabelValues(monitor.OpRepoGC).Observe(time.Since(start).Seconds())
+	log.Log.Sugar().Infof("GC completed, duration: %v", time.Since(start))
+	return err
 }
