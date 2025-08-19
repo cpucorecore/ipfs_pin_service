@@ -2,6 +2,7 @@ package ipfs
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"time"
@@ -106,8 +107,15 @@ type BitswapStat struct {
 
 func (c *Client) BitswapStat(ctx context.Context) (*BitswapStat, error) {
 	bitswapStat := &BitswapStat{}
-	err := c.ipfsCli.Request("bitswap/stat").Exec(ctx, bitswapStat)
+	var rawMessage json.RawMessage
+	err := c.ipfsCli.Request("bitswap/stat").Exec(ctx, &rawMessage)
 	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(rawMessage, bitswapStat)
+	if err != nil {
+		log.Log.Sugar().Infof("bitswap stat: %s", rawMessage)
 		return nil, err
 	}
 	return bitswapStat, nil

@@ -83,6 +83,8 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		if size > 0 {
 			rec.Size = size
 		}
+	} else {
+		// TODO
 	}
 
 	if s.filter.ShouldFilter(size) {
