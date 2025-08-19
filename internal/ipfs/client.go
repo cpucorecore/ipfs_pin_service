@@ -93,16 +93,30 @@ func (c *Client) RepoStat(ctx context.Context) (*RepoStat, error) {
 	return repoStat, nil
 }
 
+// 定义 Wantlist 项目类型
+type WantlistItem struct {
+	CID string `json:"/"`
+}
+
 type BitswapStat struct {
-	Wantlist         []string `json:"Wantlist"`
-	Peers            []string `json:"Peers"`
-	BlocksReceived   uint64   `json:"BlocksReceived"`
-	DataReceived     uint64   `json:"DataReceived"`
-	DupBlksReceived  uint64   `json:"DupBlksReceived"`
-	DupDataReceived  uint64   `json:"DupDataReceived"`
-	MessagesReceived uint64   `json:"MessagesReceived"`
-	BlocksSent       uint64   `json:"BlocksSent"`
-	DataSent         uint64   `json:"DataSent"`
+	WantlistItems    []WantlistItem `json:"Wantlist"`
+	Peers            []string       `json:"Peers"`
+	BlocksReceived   uint64         `json:"BlocksReceived"`
+	DataReceived     uint64         `json:"DataReceived"`
+	DupBlksReceived  uint64         `json:"DupBlksReceived"`
+	DupDataReceived  uint64         `json:"DupDataReceived"`
+	MessagesReceived uint64         `json:"MessagesReceived"`
+	BlocksSent       uint64         `json:"BlocksSent"`
+	DataSent         uint64         `json:"DataSent"`
+}
+
+// 获取 Wantlist CID 列表
+func (bs *BitswapStat) GetWantlist() []string {
+	result := make([]string, len(bs.WantlistItems))
+	for i, item := range bs.WantlistItems {
+		result[i] = item.CID
+	}
+	return result
 }
 
 func (c *Client) BitswapStat(ctx context.Context) (*BitswapStat, error) {

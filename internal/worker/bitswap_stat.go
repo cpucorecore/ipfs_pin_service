@@ -42,15 +42,16 @@ func (w *BitswapStatWorker) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	wantlist := bs.GetWantlist()
 	monitor.RecordBitswapStat(
-		len(bs.Peers), len(bs.Wantlist),
+		len(bs.Peers), len(wantlist),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,
 		bs.DupBlksReceived, bs.DupDataReceived,
 		bs.MessagesReceived,
 	)
 	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d. api duration=%f seconds",
-		len(bs.Peers), len(bs.Wantlist),
+		len(bs.Peers), len(wantlist),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,
 		bs.DupBlksReceived, bs.DupDataReceived,

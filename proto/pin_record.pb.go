@@ -38,6 +38,7 @@ type PinRecord struct {
 	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
 	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
 	SizeLimit         int64                  `protobuf:"varint,15,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
+	History           []*PinRecord           `protobuf:"bytes,16,rep,name=history,proto3" json:"history,omitempty"` // 历史状态记录
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -177,11 +178,18 @@ func (x *PinRecord) GetSizeLimit() int64 {
 	return 0
 }
 
+func (x *PinRecord) GetHistory() []*PinRecord {
+	if x != nil {
+		return x.History
+	}
+	return nil
+}
+
 var File_proto_pin_record_proto protoreflect.FileDescriptor
 
 const file_proto_pin_record_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/pin_record.proto\x12\x03ipm\"\x95\x04\n" +
+	"\x16proto/pin_record.proto\x12\x03ipm\"\xbf\x04\n" +
 	"\tPinRecord\x12\x10\n" +
 	"\x03cid\x18\x01 \x01(\tR\x03cid\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x1f\n" +
@@ -202,7 +210,8 @@ const file_proto_pin_record_proto_rawDesc = "" +
 	"\x11pin_attempt_count\x18\r \x01(\x05R\x0fpinAttemptCount\x12.\n" +
 	"\x13unpin_attempt_count\x18\x0e \x01(\x05R\x11unpinAttemptCount\x12\x1d\n" +
 	"\n" +
-	"size_limit\x18\x0f \x01(\x03R\tsizeLimitB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
+	"size_limit\x18\x0f \x01(\x03R\tsizeLimit\x12(\n" +
+	"\ahistory\x18\x10 \x03(\v2\x0e.ipm.PinRecordR\ahistoryB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
 
 var (
 	file_proto_pin_record_proto_rawDescOnce sync.Once
@@ -221,11 +230,12 @@ var file_proto_pin_record_proto_goTypes = []any{
 	(*PinRecord)(nil), // 0: ipm.PinRecord
 }
 var file_proto_pin_record_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: ipm.PinRecord.history:type_name -> ipm.PinRecord
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_proto_pin_record_proto_init() }

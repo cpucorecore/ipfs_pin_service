@@ -19,4 +19,5 @@ message PinRecord {
     int32 pin_attempt_count = 13;
     int32 unpin_attempt_count = 14;
     int64 size_limit = 15;
+    repeated PinRecord history = 16;  // 历史状态记录
 }
