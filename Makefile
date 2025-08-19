@@ -23,7 +23,7 @@ PROTO_FILES := $(wildcard proto/*.proto)
 PROTO_GO_OUT := .
 PROTO_GO_OPT := paths=source_relative
 
-all: proto build
+all: build
 
 # 编译二进制文件
 build:
