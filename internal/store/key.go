@@ -5,6 +5,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strconv"
+)
+
+var (
+	ExpireStartKey    = []byte(prefixExpire + "/")
+	ExpireStartKeyLen = 2
+	CidV2Len          = 59
 )
 
 func makePinRecordKey(cid string) []byte {
@@ -23,12 +30,21 @@ func makeStatusKey(status Status, ts int64, cid string) []byte {
 	return buf.Bytes()
 }
 
+func makeExpireEndKey(ts int64) []byte {
+	buffer := make([]byte, 0, ExpireStartKeyLen+8)
+	key := bytes.NewBuffer(buffer[:])
+	key.Write(ExpireStartKey)
+	key.WriteString(fmt.Sprintf("%d", ts))
+	return key.Bytes()
+}
+
 func makeExpireKey(ts int64, cid string) []byte {
-	var buf bytes.Buffer
-	buf.WriteString(prefixExpire + "/")
-	binary.Write(&buf, binary.BigEndian, ts)
-	buf.WriteString("/" + cid)
-	return buf.Bytes()
+	buffer := make([]byte, 0, ExpireStartKeyLen+8+1+len(cid))
+	key := bytes.NewBuffer(buffer[:])
+	key.Write(ExpireStartKey)
+	key.WriteString(fmt.Sprintf("%d", ts))
+	key.WriteString("/" + cid)
+	return key.Bytes()
 }
 
 var (
@@ -46,7 +62,11 @@ func parseExpireKey(key []byte) (ts int64, cid string, err error) {
 		return 0, "", ErrWrongExpirePrefix
 	}
 
-	ts = int64(binary.BigEndian.Uint64(parts[1]))
+	ts, err = strconv.ParseInt(string(parts[1]), 10, 64)
+	if err != nil {
+		return 0, "", fmt.Errorf("parse timestamp: %w", err)
+	}
+
 	cid = string(parts[2])
 	return
 }

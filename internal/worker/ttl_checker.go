@@ -37,11 +37,13 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 }
 
 func (c *TTLChecker) check(ctx context.Context) error {
+	log.Log.Sugar().Infof("TTL check start")
 	now := time.Now().UnixMilli()
 	cids, err := c.store.IndexByExpireBefore(ctx, now, c.cfg.TTLChecker.BatchSize)
 	if err != nil {
 		return err
 	}
+	log.Log.Sugar().Infof("TTL check end with %d cids", len(cids))
 
 	for _, cid := range cids {
 		rec, err := c.store.Get(ctx, cid)

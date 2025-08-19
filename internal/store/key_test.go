@@ -34,6 +34,7 @@ func TestMakeStatusKeyAndPrefix(t *testing.T) {
 func TestMakeExpireKeyAndParse(t *testing.T) {
 	const ts int64 = 987654321
 	key := makeExpireKey(ts, "abc")
+	t.Logf("key: %s", key)
 
 	parsedTs, cid, err := parseExpireKey(key)
 	if err != nil {

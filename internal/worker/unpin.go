@@ -67,7 +67,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	err := w.ipfs.PinRm(ctxUnpin, cid)
 	monitor.ObserveOperation(monitor.OpPinRm, time.Since(start), err)
 	if err != nil {
-		if err.Error() == "pin/rm: not pinned or pinned indirectly" {
+		if err.Error() == "not pinned or pinned indirectly" {
 			log.Log.Sugar().Infof("CID %s is already unpinned", cid)
 			if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
 				r.Status = store.StatusUnpinSucceeded

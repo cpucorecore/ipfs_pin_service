@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -137,15 +136,11 @@ func (s *PebbleStore) IndexByStatus(ctx context.Context, status Status) (Iterato
 }
 
 func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error) {
-	prefix := []byte(prefixExpire + "/")
-
-	var upperBound bytes.Buffer
-	upperBound.Write(prefix)
-	binary.Write(&upperBound, binary.BigEndian, ts)
+	expireEndKey := makeExpireEndKey(ts)
 
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: prefix,
-		UpperBound: upperBound.Bytes(),
+		LowerBound: ExpireStartKey,
+		UpperBound: expireEndKey,
 	})
 	defer iter.Close()
 

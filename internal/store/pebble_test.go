@@ -275,10 +275,10 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 
 	// Insert with expire ts and out-of-order cids for tie-breaker
 	items := []PinRecord{
-		{Cid: "c-b", Status: StatusActive, LastUpdateAt: 1, ExpireAt: 200},
-		{Cid: "c-z", Status: StatusActive, LastUpdateAt: 2, ExpireAt: 100},
-		{Cid: "c-a", Status: StatusActive, LastUpdateAt: 3, ExpireAt: 100},
-		{Cid: "c-c", Status: StatusActive, LastUpdateAt: 4, ExpireAt: 300},
+		{Cid: "c-b", Status: StatusActive, LastUpdateAt: 1, ExpireAt: 2000},
+		{Cid: "c-z", Status: StatusActive, LastUpdateAt: 2, ExpireAt: 1000},
+		{Cid: "c-a", Status: StatusActive, LastUpdateAt: 3, ExpireAt: 1000},
+		{Cid: "c-c", Status: StatusActive, LastUpdateAt: 4, ExpireAt: 3000},
 	}
 	for i := range items {
 		rec := items[i]
@@ -288,7 +288,7 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 	}
 
 	// Without tight upper bound to include all
-	got, err := s.IndexByExpireBefore(ctx, 1000, 10)
+	got, err := s.IndexByExpireBefore(ctx, 9000, 10)
 	if err != nil {
 		t.Fatalf("IndexByExpireBefore error: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 	}
 
 	// Limit should respect the same ordering
-	got, err = s.IndexByExpireBefore(ctx, 1000, 2)
+	got, err = s.IndexByExpireBefore(ctx, 9000, 2)
 	if err != nil {
 		t.Fatalf("IndexByExpireBefore error: %v", err)
 	}
