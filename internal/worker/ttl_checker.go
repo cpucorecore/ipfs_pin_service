@@ -64,10 +64,13 @@ func (c *TTLChecker) check(ctx context.Context) error {
 			continue
 		}
 
+		// 直接发送 CID 字符串，简单高效
+		body := []byte(cid)
+
 		// 重试机制：最多重试3次
 		var enqueueErr error
 		for retry := 0; retry < 3; retry++ {
-			enqueueErr = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
+			enqueueErr = c.queue.Enqueue(ctx, "unpin.exchange", body)
 			if enqueueErr == nil {
 				break
 			}

@@ -26,9 +26,8 @@ type RabbitMQ struct {
 }
 
 func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
-	// 配置连接参数，包括心跳
 	config := amqp.Config{
-		Heartbeat: 30 * time.Second, // 心跳间隔 30 秒
+		Heartbeat: 30 * time.Second,
 		Locale:    "en_US",
 	}
 
@@ -43,7 +42,7 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 		return nil, fmt.Errorf("create channel: %w", err)
 	}
 
-	if err := ch.Qos(cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+	if err = ch.Qos(cfg.RabbitMQ.Prefetch, 0, false); err != nil {
 		ch.Close()
 		conn.Close()
 		return nil, fmt.Errorf("set QoS: %w", err)
@@ -62,14 +61,11 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 		return nil, fmt.Errorf("setup topology: %w", err)
 	}
 
-	// 启动连接监控
 	go mq.monitorConnection()
-
 	return mq, nil
 }
 
 func (mq *RabbitMQ) setupTopology() error {
-	// Pin queues
 	if err := mq.setupExchangeAndQueue(
 		mq.cfg.RabbitMQ.Pin.Exchange,
 		mq.cfg.RabbitMQ.Pin.Queue,
@@ -80,7 +76,6 @@ func (mq *RabbitMQ) setupTopology() error {
 		return fmt.Errorf("setup pin queues: %w", err)
 	}
 
-	// Unpin queues
 	if err := mq.setupExchangeAndQueue(
 		mq.cfg.RabbitMQ.Unpin.Exchange,
 		mq.cfg.RabbitMQ.Unpin.Queue,
@@ -164,6 +159,7 @@ func (mq *RabbitMQ) declareExchangeWithRecovery(name, kind string, durable bool)
 	if err == nil {
 		return nil
 	}
+
 	if isPreconditionFailed(err) {
 		// Channel is closed by broker on 406; reopen and then recreate
 		if rerr := mq.reopenChannel(); rerr != nil {
@@ -218,6 +214,7 @@ func isPreconditionFailed(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	var amqErr *amqp.Error
 	if errors.As(err, &amqErr) {
 		return amqErr.Code == 406
@@ -229,10 +226,12 @@ func isChannelNotOpen(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	var amqErr *amqp.Error
 	if errors.As(err, &amqErr) {
 		return amqErr.Code == 504
 	}
+
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "channel/connection is not open") || strings.Contains(s, "504")
 }
@@ -241,14 +240,17 @@ func (mq *RabbitMQ) reopenChannel() error {
 	if mq.conn == nil {
 		return fmt.Errorf("amqp connection is nil")
 	}
+
 	ch, err := mq.conn.Channel()
 	if err != nil {
 		return fmt.Errorf("reopen channel: %w", err)
 	}
-	if err := ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+
+	if err = ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
 		ch.Close()
 		return fmt.Errorf("set QoS on reopened channel: %w", err)
 	}
+
 	if mq.ch != nil {
 		_ = mq.ch.Close()
 	}
@@ -274,7 +276,7 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 		false,      // mandatory
 		false,      // immediate
 		amqp.Publishing{
-			ContentType:  "application/octet-stream",
+			ContentType:  "text/plain", // 使用文本类型，提高可读性
 			Body:         body,
 			DeliveryMode: amqp.Persistent,
 		},
@@ -292,7 +294,7 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 			false,      // mandatory
 			false,      // immediate
 			amqp.Publishing{
-				ContentType:  "application/octet-stream",
+				ContentType:  "text/plain", // 使用文本类型，提高可读性
 				Body:         body,
 				DeliveryMode: amqp.Persistent,
 			},

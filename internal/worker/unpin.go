@@ -40,6 +40,7 @@ func (w *UnpinWorker) Start(ctx context.Context) error {
 }
 
 func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
+	// 直接使用字符串格式的 CID
 	cid := string(body)
 
 	if !util.CheckCid(cid) {
