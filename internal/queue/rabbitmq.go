@@ -11,19 +11,28 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type RabbitMQ struct {
-	conn      *amqp.Connection
-	ch        *amqp.Channel
-	cfg       *config.Config
-	closeOnce sync.Once
-	closeChan chan struct{}
+	conn           *amqp.Connection
+	ch             *amqp.Channel
+	cfg            *config.Config
+	closeOnce      sync.Once
+	closeChan      chan struct{}
+	reconnectMutex sync.Mutex
+	isReconnecting bool
 }
 
 func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
-	conn, err := amqp.Dial(cfg.RabbitMQ.URL)
+	// 配置连接参数，包括心跳
+	config := amqp.Config{
+		Heartbeat: 30 * time.Second, // 心跳间隔 30 秒
+		Locale:    "en_US",
+	}
+
+	conn, err := amqp.DialConfig(cfg.RabbitMQ.URL, config)
 	if err != nil {
 		return nil, fmt.Errorf("connect to rabbitmq: %w", err)
 	}
@@ -41,16 +50,20 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 	}
 
 	mq := &RabbitMQ{
-		conn:      conn,
-		ch:        ch,
-		cfg:       cfg,
-		closeChan: make(chan struct{}),
+		conn:           conn,
+		ch:             ch,
+		cfg:            cfg,
+		closeChan:      make(chan struct{}),
+		isReconnecting: false,
 	}
 
 	if err = mq.setupTopology(); err != nil {
 		mq.Close()
 		return nil, fmt.Errorf("setup topology: %w", err)
 	}
+
+	// 启动连接监控
+	go mq.monitorConnection()
 
 	return mq, nil
 }
@@ -255,7 +268,7 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 		return fmt.Errorf("unknown exchange: %s", exchange)
 	}
 
-	return mq.ch.PublishWithContext(ctx,
+	err := mq.ch.PublishWithContext(ctx,
 		exchange,   // exchange
 		routingKey, // routing key (queue name)
 		false,      // mandatory
@@ -266,6 +279,27 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 			DeliveryMode: amqp.Persistent,
 		},
 	)
+
+	// 如果通道关闭，尝试重新打开
+	if isChannelNotOpen(err) {
+		if rerr := mq.reopenChannel(); rerr != nil {
+			return fmt.Errorf("failed to reopen channel: %w", rerr)
+		}
+		// 重试发布
+		return mq.ch.PublishWithContext(ctx,
+			exchange,   // exchange
+			routingKey, // routing key (queue name)
+			false,      // mandatory
+			false,      // immediate
+			amqp.Publishing{
+				ContentType:  "application/octet-stream",
+				Body:         body,
+				DeliveryMode: amqp.Persistent,
+			},
+		)
+	}
+
+	return err
 }
 
 func (mq *RabbitMQ) Dequeue(ctx context.Context, topic string, handler DeliveryHandler) error {
@@ -372,6 +406,116 @@ func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
 		Unacked: int64(q.Consumers),
 		Total:   int64(q.Messages + q.Consumers),
 	}, nil
+}
+
+// monitorConnection 监控连接状态并在断开时自动重连
+func (mq *RabbitMQ) monitorConnection() {
+	connClosed := mq.conn.NotifyClose(make(chan *amqp.Error))
+	channelClosed := mq.ch.NotifyClose(make(chan *amqp.Error))
+
+	for {
+		select {
+		case <-mq.closeChan:
+			return
+		case err := <-connClosed:
+			if err != nil {
+				log.Log.Sugar().Warnf("RabbitMQ connection closed: %v", err)
+				mq.reconnect()
+			}
+		case err := <-channelClosed:
+			if err != nil {
+				log.Log.Sugar().Warnf("RabbitMQ channel closed: %v", err)
+				mq.reopenChannel()
+			}
+		}
+	}
+}
+
+// reconnect 重新连接到 RabbitMQ
+func (mq *RabbitMQ) reconnect() {
+	mq.reconnectMutex.Lock()
+	defer mq.reconnectMutex.Unlock()
+
+	if mq.isReconnecting {
+		return
+	}
+
+	mq.isReconnecting = true
+	defer func() { mq.isReconnecting = false }()
+
+	log.Log.Sugar().Info("Starting RabbitMQ reconnection...")
+
+	// 指数退避重连
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+
+	for i := 0; i < 10; i++ { // 最多重试 10 次
+		select {
+		case <-mq.closeChan:
+			return
+		default:
+		}
+
+		// 配置连接参数
+		config := amqp.Config{
+			Heartbeat: 30 * time.Second,
+			Locale:    "en_US",
+		}
+
+		conn, err := amqp.DialConfig(mq.cfg.RabbitMQ.URL, config)
+		if err != nil {
+			log.Log.Sugar().Errorf("Reconnect attempt %d failed: %v", i+1, err)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			conn.Close()
+			log.Log.Sugar().Errorf("Create channel failed during reconnect: %v", err)
+			time.Sleep(backoff)
+			continue
+		}
+
+		if err := ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+			ch.Close()
+			conn.Close()
+			log.Log.Sugar().Errorf("Set QoS failed during reconnect: %v", err)
+			time.Sleep(backoff)
+			continue
+		}
+
+		// 关闭旧连接
+		if mq.conn != nil {
+			mq.conn.Close()
+		}
+		if mq.ch != nil {
+			mq.ch.Close()
+		}
+
+		// 更新连接
+		mq.conn = conn
+		mq.ch = ch
+
+		// 重新设置拓扑
+		if err := mq.setupTopology(); err != nil {
+			log.Log.Sugar().Errorf("Setup topology failed during reconnect: %v", err)
+			time.Sleep(backoff)
+			continue
+		}
+
+		log.Log.Sugar().Info("RabbitMQ reconnected successfully")
+
+		// 重新启动监控
+		go mq.monitorConnection()
+		return
+	}
+
+	log.Log.Sugar().Error("Failed to reconnect to RabbitMQ after 10 attempts")
 }
 
 func (mq *RabbitMQ) Close() error {

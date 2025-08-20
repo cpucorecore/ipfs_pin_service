@@ -64,9 +64,23 @@ func (c *TTLChecker) check(ctx context.Context) error {
 			continue
 		}
 
-		err = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
-		if err != nil {
-			log.Log.Sugar().Errorf("queue.Enqueue(%s) err: %v", cid, err)
+		// 重试机制：最多重试3次
+		var enqueueErr error
+		for retry := 0; retry < 3; retry++ {
+			enqueueErr = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
+			if enqueueErr == nil {
+				break
+			}
+
+			// 如果是连接错误，等待一段时间后重试
+			if retry < 2 {
+				log.Log.Sugar().Warnf("queue.Enqueue(%s) retry %d/3 err: %v", cid, retry+1, enqueueErr)
+				time.Sleep(time.Second * time.Duration(retry+1)) // 指数退避：1s, 2s
+			}
+		}
+
+		if enqueueErr != nil {
+			log.Log.Sugar().Errorf("queue.Enqueue(%s) failed after 3 retries: %v", cid, enqueueErr)
 			continue
 		}
 	}
