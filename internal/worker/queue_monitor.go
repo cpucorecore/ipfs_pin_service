@@ -19,12 +19,7 @@ func NewQueueMonitor(mq queue.MessageQueue, cfg *config.Config) *QueueMonitor {
 }
 
 func (w *QueueMonitor) Start(ctx context.Context) error {
-	// reuse TTL checker interval for queue monitoring frequency
-	interval := w.cfg.TTLChecker.Interval
-	if interval <= 0 {
-		interval = 5 * time.Second
-	}
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 
 	for {
