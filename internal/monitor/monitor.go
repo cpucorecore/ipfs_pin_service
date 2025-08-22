@@ -79,9 +79,6 @@ var (
 		prometheus.CounterOpts{Name: "ipfs_filter_total"},
 		[]string{"result"},
 	)
-	filterRequestSize = prometheus.NewHistogram(
-		prometheus.HistogramOpts{Name: "ipfs_filter_request_size_bytes", Buckets: prometheus.ExponentialBuckets(1024, 2, 20)},
-	)
 )
 
 func init() {
@@ -108,7 +105,6 @@ func init() {
 		ipfsAvailable,
 		filterSizeLimitGauge,
 		filterTotal,
-		filterRequestSize,
 	)
 }
 
@@ -180,10 +176,7 @@ func SetFilterSizeLimit(limit int64) {
 	filterSizeLimitGauge.Set(float64(limit))
 }
 
-func ObserveFilter(size int64, filtered bool) {
-	if size > 0 {
-		filterRequestSize.Observe(float64(size))
-	}
+func ObserveFilter(filtered bool) {
 	result := "accepted"
 	if filtered {
 		result = "filtered"

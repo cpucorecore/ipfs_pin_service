@@ -20,15 +20,15 @@ func New(cfg *config.Config) *Filter {
 
 func (f *Filter) ShouldFilter(size int64) bool {
 	if f.sizeLimit <= 0 {
-		monitor.ObserveFilter(size, false)
+		monitor.ObserveFilter(false)
 		return false
 	}
 	if size <= 0 {
-		monitor.ObserveFilter(size, false)
+		monitor.ObserveFilter(false)
 		return false
 	}
 	filtered := size > f.sizeLimit
-	monitor.ObserveFilter(size, filtered)
+	monitor.ObserveFilter(filtered)
 	return filtered
 }
 
