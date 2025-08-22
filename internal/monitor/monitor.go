@@ -35,7 +35,7 @@ var (
 	fileSizeHist = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "ipfs_pin_file_size_bytes",
-			Buckets: prometheus.ExponentialBuckets(1024*200, 2, 20),
+			Buckets: prometheus.ExponentialBuckets(1024*200, 2, 12),
 		},
 	)
 
