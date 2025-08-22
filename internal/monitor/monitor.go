@@ -69,8 +69,8 @@ var (
 	bsDupDataReceived   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_dup_data_received_bytes_total"})
 	bsMessagesReceived  = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_bitswap_messages_received_total"})
 
-	queueReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_ready"}, []string{"queue"})
-	queueTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_total"}, []string{"queue"})
+	queueMessages  = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_messages"}, []string{"queue"})
+	queueConsumers = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "ipfs_queue_consumers"}, []string{"queue"})
 
 	ipfsAvailable = prometheus.NewGauge(prometheus.GaugeOpts{Name: "ipfs_available"})
 
@@ -150,9 +150,9 @@ func RegisterMetricsRoute(r *gin.Engine) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-func SetQueueStats(queueName string, ready, total int64) {
-	queueReady.WithLabelValues(queueName).Set(float64(ready))
-	queueTotal.WithLabelValues(queueName).Set(float64(total))
+func SetQueueStats(queueName string, messages, consumers int64) {
+	queueMessages.WithLabelValues(queueName).Set(float64(messages))
+	queueConsumers.WithLabelValues(queueName).Set(float64(consumers))
 }
 
 func SetIPFSAvailable(up bool) {

@@ -424,9 +424,8 @@ func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
 	}
 
 	return Stats{
-		Ready:   int64(q.Messages),
-		Unacked: int64(q.Consumers),
-		Total:   int64(q.Messages + q.Consumers),
+		Messages:  int64(q.Messages),
+		Consumers: int64(q.Consumers),
 	}, nil
 }
 

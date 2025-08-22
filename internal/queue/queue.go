@@ -7,9 +7,8 @@ import (
 type DeliveryHandler func(ctx context.Context, body []byte) error
 
 type Stats struct {
-	Ready   int64
-	Unacked int64
-	Total   int64
+	Messages  int64
+	Consumers int64
 }
 
 type MessageQueue interface {
