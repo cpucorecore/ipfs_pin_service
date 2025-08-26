@@ -7,6 +7,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type QueueConf struct {
+	Exchange   string        `yaml:"exchange"`
+	Queue      string        `yaml:"queue"`
+	DLX        string        `yaml:"dlx"`
+	RetryQueue string        `yaml:"retry_queue"`
+	RetryDelay time.Duration `yaml:"retry_delay"`
+}
+
+type RabbitMQConf struct {
+	URL      string    `yaml:"url"`
+	Prefetch int       `yaml:"prefetch"`
+	Pin      QueueConf `yaml:"pin"`
+	Unpin    QueueConf `yaml:"unpin"`
+}
+
 type Config struct {
 	Log struct {
 		Level         string        `yaml:"level"`
@@ -23,24 +38,7 @@ type Config struct {
 		DialTimeout time.Duration `yaml:"dial_timeout"`
 	} `yaml:"ipfs"`
 
-	RabbitMQ struct {
-		URL      string `yaml:"url"`
-		Prefetch int    `yaml:"prefetch"`
-		Pin      struct {
-			Exchange   string        `yaml:"exchange"`
-			Queue      string        `yaml:"queue"`
-			DLX        string        `yaml:"dlx"`
-			RetryQueue string        `yaml:"retry_queue"`
-			RetryDelay time.Duration `yaml:"retry_delay"`
-		} `yaml:"pin"`
-		Unpin struct {
-			Exchange   string        `yaml:"exchange"`
-			Queue      string        `yaml:"queue"`
-			DLX        string        `yaml:"dlx"`
-			RetryQueue string        `yaml:"retry_queue"`
-			RetryDelay time.Duration `yaml:"retry_delay"`
-		} `yaml:"unpin"`
-	} `yaml:"rabbitmq"`
+	RabbitMQ RabbitMQConf `yaml:"rabbitmq"`
 
 	Workers struct {
 		PinConcurrency   int           `yaml:"pin_concurrency"`
