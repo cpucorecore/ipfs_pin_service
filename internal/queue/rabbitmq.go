@@ -60,7 +60,11 @@ func (mq *RabbitMQ) closeChannel() {
 	}
 }
 
-func (mq *RabbitMQ) mustReCreateChannel() {
+var (
+	ErrCreateChannel = errors.New("create channel error")
+)
+
+func (mq *RabbitMQ) mustRecreateChannel() error {
 	retry := 0
 	const maxRetries = 30
 	retryDelay := time.Second
@@ -71,7 +75,7 @@ func (mq *RabbitMQ) mustReCreateChannel() {
 		if err == nil {
 			mq.closeChannel()
 			mq.setChannel(channel)
-			return
+			return nil
 		}
 
 		log.Log.Sugar().Errorf("Failed to create channel retry=%d err=[%s]", retry, err)
@@ -83,10 +87,11 @@ func (mq *RabbitMQ) mustReCreateChannel() {
 		retry++
 	}
 
-	panic("Failed to create channel")
+	log.Log.Sugar().Errorf("failed to create channel retry=%d, no more request will enqueue", retry)
+	return ErrCreateChannel
 }
 
-func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body []byte) {
+func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body []byte) error {
 	msg := amqp.Publishing{
 		ContentType:  "text/plain",
 		Body:         body,
@@ -95,6 +100,12 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 
 	var err error
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		err = mq.getChannel().PublishWithContext(ctx, exchange, key, false, false, msg)
 		if err == nil {
 			break
@@ -102,10 +113,15 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 			log.Log.Sugar().Errorf("Failed to publish message to queue %s, body=[%s], err=[%s]", key, string(body), err.Error())
 			if mq.channel.IsClosed() {
 				log.Log.Sugar().Warnf("channel is closed, try to recreate it")
-				mq.mustReCreateChannel()
+				err = mq.mustRecreateChannel()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
+
+	return nil
 }
 
 var (
@@ -126,8 +142,7 @@ func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) e
 		return err
 	}
 
-	mq.mustPublish(ctx, exchange, routingKey, body)
-	return nil
+	return mq.mustPublish(ctx, exchange, routingKey, body)
 }
 
 func (mq *RabbitMQ) DequeueConcurrent(ctx context.Context, topic string, concurrency int, handler DeliveryHandler) error {
