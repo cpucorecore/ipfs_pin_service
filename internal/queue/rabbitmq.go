@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -16,251 +15,27 @@ import (
 )
 
 type RabbitMQ struct {
-	cfg       *config.Config
-	closeChan chan struct{}
-	closeOnce sync.Once
-
-	connMutex      sync.RWMutex
-	conn           *amqp.Connection
-	ch             *amqp.Channel
-	isReconnecting bool
+	connectionManager ConnectionManager
+	channel           *amqp.Channel
+	queueConfig       map[string]config.QueueConf
 }
 
 func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
-	mq := &RabbitMQ{
-		cfg:       cfg,
-		closeChan: make(chan struct{}),
-	}
-
-	if err := mq.connect(); err != nil {
-		return nil, fmt.Errorf("connnect mq: %w", err)
-	}
-
-	go mq.monitorConnection()
-
-	return mq, nil
-}
-
-func (mq *RabbitMQ) connect() error {
-	config := amqp.Config{
-		Heartbeat: 30 * time.Second,
-		Locale:    "en_US",
-	}
-
-	conn, err := amqp.DialConfig(mq.cfg.RabbitMQ.URL, config)
+	connectionManager := NewConnectionManager(cfg.RabbitMQ.URL)
+	channel, err := connectionManager.CreateChannel()
 	if err != nil {
-		return fmt.Errorf("dial rabbitmq: %w", err)
+		return nil, err
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("create channel: %w", err)
-	}
+	queueConfig := make(map[string]config.QueueConf)
+	queueConfig[cfg.RabbitMQ.Pin.Exchange] = cfg.RabbitMQ.Pin
+	queueConfig[cfg.RabbitMQ.Unpin.Exchange] = cfg.RabbitMQ.Unpin
 
-	if err = ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
-		ch.Close()
-		conn.Close()
-		return fmt.Errorf("set QoS: %w", err)
-	}
-
-	if err = mq.setupTopology(ch); err != nil {
-		ch.Close()
-		conn.Close()
-		return fmt.Errorf("setup topology: %w", err)
-	}
-
-	mq.connMutex.Lock()
-	mq.conn = conn
-	mq.ch = ch
-	mq.connMutex.Unlock()
-
-	return nil
-}
-
-func (mq *RabbitMQ) disconnect() {
-	mq.connMutex.Lock()
-	defer mq.connMutex.Unlock()
-
-	if mq.ch != nil {
-		mq.ch.Close()
-		mq.ch = nil
-	}
-	if mq.conn != nil {
-		mq.conn.Close()
-		mq.conn = nil
-	}
-}
-
-func (mq *RabbitMQ) reconnect() {
-	if !mq.trySetReconnecting() {
-		return
-	}
-	defer mq.setReconnecting(false)
-
-	log.Log.Sugar().Info("Starting RabbitMQ reconnection...")
-
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
-	maxRetries := 30
-
-	for i := 0; i < maxRetries; i++ {
-		select {
-		case <-mq.closeChan:
-			return
-		default:
-		}
-
-		mq.disconnect()
-
-		if err := mq.connect(); err != nil {
-			log.Log.Sugar().Errorf("Reconnect attempt %d failed: %v", i+1, err)
-
-			time.Sleep(backoff)
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-			continue
-		}
-
-		log.Log.Sugar().Info("RabbitMQ reconnected successfully")
-		return
-	}
-
-	log.Log.Sugar().Error("Failed to reconnect to RabbitMQ after maximum attempts")
-}
-
-func (mq *RabbitMQ) trySetReconnecting() bool {
-	mq.connMutex.Lock()
-	defer mq.connMutex.Unlock()
-
-	if mq.isReconnecting {
-		return false
-	}
-	mq.isReconnecting = true
-	return true
-}
-
-func (mq *RabbitMQ) setReconnecting(reconnecting bool) {
-	mq.connMutex.Lock()
-	defer mq.connMutex.Unlock()
-	mq.isReconnecting = reconnecting
-}
-
-func (mq *RabbitMQ) getConnectionState() (*amqp.Connection, *amqp.Channel) {
-	mq.connMutex.RLock()
-	defer mq.connMutex.RUnlock()
-	return mq.conn, mq.ch
-}
-
-func (mq *RabbitMQ) setupTopology(ch *amqp.Channel) error {
-	if err := mq.setupExchangeAndQueue(
-		ch,
-		mq.cfg.RabbitMQ.Pin.Exchange,
-		mq.cfg.RabbitMQ.Pin.Queue,
-		mq.cfg.RabbitMQ.Pin.DLX,
-		mq.cfg.RabbitMQ.Pin.RetryQueue,
-		mq.cfg.RabbitMQ.Pin.RetryDelay,
-	); err != nil {
-		return fmt.Errorf("setup pin queues: %w", err)
-	}
-
-	if err := mq.setupExchangeAndQueue(
-		ch,
-		mq.cfg.RabbitMQ.Unpin.Exchange,
-		mq.cfg.RabbitMQ.Unpin.Queue,
-		mq.cfg.RabbitMQ.Unpin.DLX,
-		mq.cfg.RabbitMQ.Unpin.RetryQueue,
-		mq.cfg.RabbitMQ.Unpin.RetryDelay,
-	); err != nil {
-		return fmt.Errorf("setup unpin queues: %w", err)
-	}
-
-	return nil
-}
-
-func (mq *RabbitMQ) setupExchangeAndQueue(
-	ch *amqp.Channel,
-	exchange, queue, dlx, retryQueue string,
-	retryDelay time.Duration,
-) error {
-	if err := mq.declareExchange(ch, exchange, "direct", true); err != nil {
-		return fmt.Errorf("declare exchange: %w", err)
-	}
-
-	if err := mq.declareExchange(ch, dlx, "direct", true); err != nil {
-		return fmt.Errorf("declare DLX: %w", err)
-	}
-
-	if err := mq.declareQueue(ch, queue, amqp.Table{
-		"x-dead-letter-exchange":    dlx,
-		"x-dead-letter-routing-key": retryQueue,
-	}); err != nil {
-		return fmt.Errorf("declare queue: %w", err)
-	}
-
-	// Declare retry queue
-	if err := mq.declareQueue(ch, retryQueue, amqp.Table{
-		"x-dead-letter-exchange":    exchange,
-		"x-dead-letter-routing-key": queue,
-		"x-message-ttl":             retryDelay.Milliseconds(),
-	}); err != nil {
-		return fmt.Errorf("declare retry queue: %w", err)
-	}
-
-	if err := ch.QueueBind(queue, queue, exchange, false, nil); err != nil {
-		return fmt.Errorf("bind queue: %w", err)
-	}
-
-	if err := ch.QueueBind(retryQueue, retryQueue, dlx, false, nil); err != nil {
-		return fmt.Errorf("bind retry queue: %w", err)
-	}
-
-	return nil
-}
-
-func (mq *RabbitMQ) declareExchange(ch *amqp.Channel, name, kind string, durable bool) error {
-	return ch.ExchangeDeclare(name, kind, durable, false, false, false, nil)
-}
-
-func (mq *RabbitMQ) declareQueue(ch *amqp.Channel, name string, args amqp.Table) error {
-	_, err := ch.QueueDeclare(name, true, false, false, false, args)
-	return err
-}
-
-func (mq *RabbitMQ) monitorConnection() {
-	for {
-		select {
-		case <-mq.closeChan:
-			return
-		default:
-		}
-
-		conn, ch := mq.getConnectionState()
-		if conn == nil || ch == nil {
-			time.Sleep(time.Second)
-			continue
-		}
-
-		connClosed := conn.NotifyClose(make(chan *amqp.Error))
-		channelClosed := ch.NotifyClose(make(chan *amqp.Error))
-
-		select {
-		case <-mq.closeChan:
-			return
-		case err := <-connClosed:
-			if err != nil {
-				log.Log.Sugar().Warnf("RabbitMQ connection closed: %v", err)
-				mq.reconnect()
-			}
-		case err := <-channelClosed:
-			if err != nil {
-				log.Log.Sugar().Warnf("RabbitMQ channel closed: %v", err)
-				mq.reconnect()
-			}
-		}
-	}
+	return &RabbitMQ{
+		connectionManager: connectionManager,
+		channel:           channel,
+		queueConfig:       queueConfig,
+	}, nil
 }
 
 func isChannelNotOpen(err error) bool {
@@ -277,8 +52,8 @@ func isChannelNotOpen(err error) bool {
 	return strings.Contains(errMsg, "channel/connection is not open") || strings.Contains(errMsg, "504")
 }
 
-func (mq *RabbitMQ) publishWithChannel(ctx context.Context, ch *amqp.Channel, exchange, key string, body []byte) error {
-	return ch.PublishWithContext(ctx,
+func (mq *RabbitMQ) publishWithChannel(ctx context.Context, exchange, key string, body []byte) error {
+	return mq.channel.PublishWithContext(ctx,
 		exchange,
 		key,
 		false,
@@ -291,39 +66,27 @@ func (mq *RabbitMQ) publishWithChannel(ctx context.Context, ch *amqp.Channel, ex
 	)
 }
 
-func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) error {
-	routingKey := ""
-	switch exchange {
-	case mq.cfg.RabbitMQ.Pin.Exchange:
-		routingKey = mq.cfg.RabbitMQ.Pin.Queue
-	case mq.cfg.RabbitMQ.Unpin.Exchange:
-		routingKey = mq.cfg.RabbitMQ.Unpin.Queue
-	default:
-		return fmt.Errorf("unknown exchange: %s", exchange)
+var (
+	ErrWrongExchange = errors.New("wrong exchange")
+)
+
+func (mq *RabbitMQ) getRoutingKey(exchange string) (string, error) {
+	c, ok := mq.queueConfig[exchange]
+	if !ok {
+		return "", ErrWrongExchange
 	}
-
-	_, ch := mq.getConnectionState()
-	if ch == nil {
-		return fmt.Errorf("failed to get channel for Enqueue: channel is nil")
-	}
-
-	err := mq.publishWithChannel(ctx, ch, exchange, routingKey, body)
-
-	if isChannelNotOpen(err) {
-		mq.reconnect()
-		_, ch = mq.getConnectionState()
-		if ch == nil {
-			return fmt.Errorf("failed to get channel after reconnect: channel is nil")
-		}
-
-		return mq.publishWithChannel(ctx, ch, exchange, routingKey, body)
-	}
-
-	return err
+	return c.Queue, nil
 }
 
-// DequeueConcurrent starts `concurrency` independent consumers on the same queue.
-// Each consumer uses its own channel (AMQP channels are not goroutine-safe).
+func (mq *RabbitMQ) Enqueue(ctx context.Context, exchange string, body []byte) error {
+	routingKey, err := mq.getRoutingKey(exchange)
+	if err != nil {
+		return err
+	}
+
+	return mq.publishWithChannel(ctx, exchange, routingKey, body)
+}
+
 func (mq *RabbitMQ) DequeueConcurrent(ctx context.Context, topic string, concurrency int, handler DeliveryHandler) error {
 	if concurrency <= 0 {
 		concurrency = 1
@@ -344,19 +107,13 @@ func (mq *RabbitMQ) consumerLoop(ctx context.Context, topic string, handler Deli
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-mq.closeChan:
-			return fmt.Errorf("queue closed")
 		default:
 		}
 
 		if err := mq.runConsumer(ctx, topic, handler); err != nil {
-			log.Log.Sugar().Warnf("Consumer error: %v, will retry", err)
-
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-mq.closeChan:
-				return fmt.Errorf("queue closed")
 			case <-time.After(time.Second):
 				continue
 			}
@@ -364,19 +121,19 @@ func (mq *RabbitMQ) consumerLoop(ctx context.Context, topic string, handler Deli
 	}
 }
 
-func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler DeliveryHandler) error {
-	conn, _ := mq.getConnectionState()
-	if conn == nil {
-		return fmt.Errorf("connection is nil")
-	}
+var (
+	ErrChannelClosed    = errors.New("channel is closed")
+	ErrMsgChannelClosed = errors.New("message channel is closed")
+)
 
-	ch, err := conn.Channel()
+func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler DeliveryHandler) error {
+	ch, err := mq.connectionManager.CreateChannel()
 	if err != nil {
 		return fmt.Errorf("create channel: %w", err)
 	}
 	defer ch.Close()
 
-	if err = ch.Qos(mq.cfg.RabbitMQ.Prefetch, 0, false); err != nil {
+	if err = ch.Qos(1, 0, false); err != nil {
 		return fmt.Errorf("set QoS: %w", err)
 	}
 
@@ -391,16 +148,17 @@ func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler Deliv
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-mq.closeChan:
-			return fmt.Errorf("queue closed")
+
 		case err = <-channelClosed:
+			log.Log.Sugar().Warnf("channel closed with no error")
 			if err != nil {
-				log.Log.Sugar().Warnf("Consumer channel closed: %v", err)
+				log.Log.Sugar().Warnf("channel closed with error: %v", err)
 			}
-			return fmt.Errorf("channel closed")
+			return ErrChannelClosed
+
 		case msg, ok := <-msgs:
 			if !ok {
-				return fmt.Errorf("message channel closed")
+				return ErrMsgChannelClosed
 			}
 
 			if err = handler(ctx, msg.Body); err != nil {
@@ -413,12 +171,7 @@ func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler Deliv
 }
 
 func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
-	_, ch := mq.getConnectionState()
-	if ch == nil {
-		return Stats{}, fmt.Errorf("failed to get channel for Stats: channel is nil")
-	}
-
-	q, err := ch.QueueInspect(topic)
+	q, err := mq.channel.QueueInspect(topic)
 	if err != nil {
 		return Stats{}, fmt.Errorf("inspect queue: %w", err)
 	}
@@ -430,9 +183,7 @@ func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
 }
 
 func (mq *RabbitMQ) Close() error {
-	mq.closeOnce.Do(func() {
-		close(mq.closeChan)
-		mq.disconnect()
-	})
+	mq.channel.Close()
+	mq.connectionManager.Close()
 	return nil
 }

@@ -10,34 +10,35 @@ import (
 
 type ConnectionManager interface {
 	GetConnection() *amqp.Connection
-	GetChannel() (*amqp.Channel, error)
+	CreateChannel() (*amqp.Channel, error)
+	Close()
 }
 
-type connectionManager struct {
+type connectionManagerImpl struct {
 	url        string
 	lock       sync.RWMutex
 	connection *amqp.Connection
 }
 
 func NewConnectionManager(url string) ConnectionManager {
-	return &connectionManager{
+	return &connectionManagerImpl{
 		url: url,
 	}
 }
 
-func (m *connectionManager) getConnection() *amqp.Connection {
+func (m *connectionManagerImpl) getConnection() *amqp.Connection {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return m.connection
 }
 
-func (m *connectionManager) setConnection(conn *amqp.Connection) {
+func (m *connectionManagerImpl) setConnection(conn *amqp.Connection) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.connection = conn
 }
 
-func (m *connectionManager) monitorConnectionPassive(ctx context.Context, connection *amqp.Connection, notifyClose chan struct{}) {
+func (m *connectionManagerImpl) monitorConnectionPassive(ctx context.Context, connection *amqp.Connection, notifyClose chan struct{}) {
 	notifyCh := connection.NotifyClose(make(chan *amqp.Error))
 
 	for {
@@ -54,7 +55,7 @@ func (m *connectionManager) monitorConnectionPassive(ctx context.Context, connec
 	}
 }
 
-func (m *connectionManager) monitorConnectionActive(ctx context.Context, connection *amqp.Connection, notifyClose chan struct{}) {
+func (m *connectionManagerImpl) monitorConnectionActive(ctx context.Context, connection *amqp.Connection, notifyClose chan struct{}) {
 	const checkInterval = 10 * time.Second
 	tick := time.Tick(checkInterval)
 	for {
@@ -72,7 +73,7 @@ func (m *connectionManager) monitorConnectionActive(ctx context.Context, connect
 	}
 }
 
-func (m *connectionManager) monitorConnection(connection *amqp.Connection) {
+func (m *connectionManagerImpl) monitorConnection(connection *amqp.Connection) {
 	closeNotifyCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -89,7 +90,7 @@ func (m *connectionManager) monitorConnection(connection *amqp.Connection) {
 	}
 }
 
-func (m *connectionManager) mustConnect() *amqp.Connection {
+func (m *connectionManagerImpl) mustConnect() *amqp.Connection {
 	const maxDelay = 30 * time.Second
 	var retryDelay = time.Second
 	for {
@@ -111,7 +112,7 @@ func (m *connectionManager) mustConnect() *amqp.Connection {
 	}
 }
 
-func (m *connectionManager) GetConnection() *amqp.Connection {
+func (m *connectionManagerImpl) GetConnection() *amqp.Connection {
 	connection := m.getConnection()
 	if connection != nil {
 		return connection
@@ -123,8 +124,15 @@ func (m *connectionManager) GetConnection() *amqp.Connection {
 	return connection
 }
 
-func (m *connectionManager) GetChannel() (*amqp.Channel, error) {
+func (m *connectionManagerImpl) CreateChannel() (*amqp.Channel, error) {
 	return m.GetConnection().Channel()
 }
 
-var _ ConnectionManager = &connectionManager{}
+func (m *connectionManagerImpl) Close() {
+	connection := m.GetConnection()
+	if connection != nil {
+		connection.Close()
+	}
+}
+
+var _ ConnectionManager = &connectionManagerImpl{}
