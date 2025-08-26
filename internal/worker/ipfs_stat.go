@@ -38,13 +38,14 @@ func (w *StatWorker) Start(ctx context.Context) error {
 func (w *StatWorker) runStat(ctx context.Context) error {
 	start := time.Now()
 	stat, err := w.ipfs.RepoStat(ctx)
-	monitor.OpDuration.WithLabelValues(monitor.OpRepoStat).Observe(time.Since(start).Seconds())
 	if err != nil {
+		monitor.SetIPFSAvailable(false)
 		return err
 	}
+
+	monitor.SetIPFSAvailable(true)
+	monitor.OpDuration.WithLabelValues(monitor.OpRepoStat).Observe(time.Since(start).Seconds())
 	monitor.RecordRepoStat(stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version)
-	log.Log.Sugar().Infof("Repo stat: size=%d, max=%d, objects=%d, path=%s, version=%s, api duration=%f seconds",
-		stat.RepoSize, stat.StorageMax, stat.NumObjects, stat.RepoPath, stat.Version, time.Since(start).Seconds())
 
 	return nil
 }

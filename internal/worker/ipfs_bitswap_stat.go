@@ -38,20 +38,20 @@ func (w *BitswapStatWorker) Start(ctx context.Context) error {
 func (w *BitswapStatWorker) run(ctx context.Context) error {
 	start := time.Now()
 	bs, err := w.ipfs.BitswapStat(ctx)
-	monitor.OpDuration.WithLabelValues(monitor.OpBitswapStat).Observe(time.Since(start).Seconds())
 	if err != nil {
 		return err
 	}
-	wantlist := bs.GetWantlist()
+	monitor.OpDuration.WithLabelValues(monitor.OpBitswapStat).Observe(time.Since(start).Seconds())
+	wantList := bs.GetWantlist()
 	monitor.RecordBitswapStat(
-		len(bs.Peers), len(wantlist),
+		len(bs.Peers), len(wantList),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,
 		bs.DupBlksReceived, bs.DupDataReceived,
 		bs.MessagesReceived,
 	)
 	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d. api duration=%f seconds",
-		len(bs.Peers), len(wantlist),
+		len(bs.Peers), len(wantList),
 		bs.BlocksReceived, bs.BlocksSent,
 		bs.DataReceived, bs.DataSent,
 		bs.DupBlksReceived, bs.DupDataReceived,

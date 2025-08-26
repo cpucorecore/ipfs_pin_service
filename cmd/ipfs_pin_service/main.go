@@ -68,7 +68,6 @@ func main() {
 	statWorker := worker.NewStatWorker(ipfsClient, cfg)
 	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
 	queueMonitor := worker.NewQueueMonitor(mq, cfg)
-	ipfsHealth := worker.NewIPFSHealthWorker(ipfsClient, cfg)
 	ttlChecker := worker.NewTTLChecker(st, mq, cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -129,14 +128,6 @@ func main() {
 		defer wg.Done()
 		if err = queueMonitor.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Queue monitor stopped: %v", err)
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = ipfsHealth.Start(ctx); err != nil {
-			log.Log.Sugar().Errorf("IPFS health worker stopped: %v", err)
 		}
 	}()
 
