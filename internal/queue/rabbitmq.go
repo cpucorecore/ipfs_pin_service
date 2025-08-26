@@ -111,7 +111,7 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 			break
 		} else {
 			log.Log.Sugar().Errorf("Failed to publish message to queue %s, body=[%s], err=[%s]", key, string(body), err.Error())
-			if mq.channel.IsClosed() {
+			if mq.getChannel().IsClosed() {
 				log.Log.Sugar().Warnf("channel is closed, try to recreate it")
 				err = mq.mustRecreateChannel()
 				if err != nil {
@@ -252,7 +252,7 @@ func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
 }
 
 func (mq *RabbitMQ) Close() error {
-	mq.channel.Close()
+	mq.closeChannel()
 	mq.connectionManager.Close()
 	return nil
 }
