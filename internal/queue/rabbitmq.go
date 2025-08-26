@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -15,6 +16,7 @@ import (
 
 type RabbitMQ struct {
 	connectionManager ConnectionManager
+	mu                sync.RWMutex
 	channel           *amqp.Channel
 	queueConfig       map[string]config.QueueConf
 }
@@ -37,6 +39,27 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 	}, nil
 }
 
+func (mq *RabbitMQ) getChannel() *amqp.Channel {
+	mq.mu.RLock()
+	defer mq.mu.RUnlock()
+	return mq.channel
+}
+
+func (mq *RabbitMQ) setChannel(channel *amqp.Channel) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	mq.channel = channel
+}
+
+func (mq *RabbitMQ) closeChannel() {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if mq.channel != nil {
+		mq.channel.Close()
+		mq.channel = nil
+	}
+}
+
 func (mq *RabbitMQ) mustReCreateChannel() {
 	retry := 0
 	const maxRetries = 30
@@ -46,10 +69,8 @@ func (mq *RabbitMQ) mustReCreateChannel() {
 	for retry < maxRetries {
 		channel, err := mq.connectionManager.CreateChannel()
 		if err == nil {
-			if mq.channel != nil {
-				mq.channel.Close()
-			}
-			mq.channel = channel
+			mq.closeChannel()
+			mq.setChannel(channel)
 			return
 		}
 
@@ -74,7 +95,7 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 
 	var err error
 	for {
-		err = mq.channel.PublishWithContext(ctx, exchange, key, false, false, msg)
+		err = mq.getChannel().PublishWithContext(ctx, exchange, key, false, false, msg)
 		if err == nil {
 			break
 		} else {
@@ -192,7 +213,18 @@ func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler Deliv
 	}
 }
 
+var (
+	DefaultStats = Stats{}
+)
+
 func (mq *RabbitMQ) Stats(ctx context.Context, topic string) (Stats, error) {
+	mq.mu.RLock()
+	defer mq.mu.RUnlock()
+
+	if mq.channel == nil {
+		return DefaultStats, ErrChannelClosed
+	}
+
 	q, err := mq.channel.QueueInspect(topic)
 	if err != nil {
 		return Stats{}, fmt.Errorf("inspect queue: %w", err)
