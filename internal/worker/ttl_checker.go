@@ -53,6 +53,7 @@ func (c *TTLChecker) checkTTL(ctx context.Context) error {
 }
 
 func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error {
+	log.Log.Sugar().Debugf("publishUnpinCids start with %d cids", len(cids))
 	for _, cid := range cids {
 		pinRecord, err := c.store.Get(ctx, cid)
 		if err != nil {
