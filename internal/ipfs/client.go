@@ -50,6 +50,8 @@ func NewClientWithConfig(url string, cfg *config.Config) *Client {
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
+			DisableKeepAlives:     false,
+			DisableCompression:    false,
 		},
 		Timeout: httpTimeout,
 	}
@@ -59,6 +61,7 @@ func NewClientWithConfig(url string, cfg *config.Config) *Client {
 		log.Log.Sugar().Fatalf("create ipfs client error: %v", err)
 	}
 
+	ipfsCli.Request("")
 	return &Client{ipfsCli: ipfsCli}
 }
 

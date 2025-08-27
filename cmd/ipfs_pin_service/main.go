@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -26,6 +27,7 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	showVersion := flag.Bool("v", false, "Show version information")
+	pprofPort := flag.Int("pprof-port", 6060, "Port for pprof debugging")
 	flag.Parse()
 
 	if *showVersion {
@@ -41,6 +43,14 @@ func main() {
 	}
 
 	log.InitLoggerWithConfig(cfg)
+
+	go func() {
+		pprofAddr := fmt.Sprintf(":%d", *pprofPort)
+		log.Log.Sugar().Infof("Starting pprof server on %s", pprofAddr)
+		if err = http.ListenAndServe(pprofAddr, nil); err != nil {
+			log.Log.Sugar().Errorf("pprof server error: %v", err)
+		}
+	}()
 
 	st, err := store.NewPebbleStore(".db")
 	if err != nil {
