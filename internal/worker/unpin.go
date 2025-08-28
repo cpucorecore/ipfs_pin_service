@@ -3,11 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"strings"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
-	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
@@ -39,21 +40,29 @@ func (w *UnpinWorker) Start(ctx context.Context) error {
 	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Unpin.Queue, w.cfg.Workers.UnpinConcurrency, w.handleMessage)
 }
 
+func IsDuplicateUnpinError(err error, cid string) bool {
+	isDuplicate := strings.Contains(err.Error(), "not pinned or pinned indirectly")
+	if isDuplicate {
+		log.Log.Sugar().Warnf("Unpin[%s] duplicate unpin", cid)
+	}
+	return isDuplicate
+}
+
 func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
-	// 直接使用字符串格式的 CID
 	cid := string(body)
+	log.Log.Sugar().Infof("Unpin[%s] start", cid)
 
 	if !util.CheckCid(cid) {
-		log.Log.Sugar().Warnf("Warning: wrong unpin cid: %s", cid)
+		log.Log.Sugar().Warnf("Unpin[%s] wrong cid", cid)
 		return nil
 	}
 
-	if _, _, err := w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
+	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinning
 		r.UnpinStartAt = time.Now().UnixMilli()
 		return nil
 	}); err != nil {
-		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
+		log.Log.Sugar().Errorf("Unpin[%s] update status err: %v", cid, err)
 		return err
 	}
 
@@ -64,64 +73,58 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		defer cancel()
 	}
 
-	start := time.Now()
+	unpinStartTime := time.Now()
 	err := w.ipfs.PinRm(ctxUnpin, cid)
-	monitor.ObserveOperation(monitor.OpPinRm, time.Since(start), err)
-	if err != nil {
-		if err.Error() == "not pinned or pinned indirectly" {
-			log.Log.Sugar().Infof("CID %s is already unpinned", cid)
-			if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
-				r.Status = store.StatusUnpinSucceeded
-				r.UnpinSucceededAt = time.Now().UnixMilli()
-				return nil
-			}); err != nil {
-				log.Log.Sugar().Errorf("Failed to update record status: %v", err)
-				return err
-			}
+	unpinEndTime := time.Now()
+	duration := unpinEndTime.Sub(unpinStartTime)
+	if err == nil || IsDuplicateUnpinError(err, cid) {
+		log.Log.Sugar().Infof("Unpin[%s] finish in %s", cid, duration)
+		monitor.ObserveOperation(monitor.OpPinRm, duration, err)
+		return w.updateStoreUnpinSuccess(ctx, cid, unpinEndTime)
+	}
 
-			if err = w.store.DeleteExpireIndex(ctx, cid); err != nil {
-				log.Log.Sugar().Errorf("Failed to delete expire index for %s: %v", cid, err)
-			}
-			return nil
-		}
+	return w.handleUnpinError(ctx, cid, err)
+}
 
+func (w *UnpinWorker) updateStoreUnpinSuccess(ctx context.Context, cid string, timestamp time.Time) error {
+	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		r.Status = store.StatusUnpinSucceeded
+		r.UnpinSucceededAt = timestamp.UnixMilli()
+		return nil
+	}); err != nil {
 		return w.handleUnpinError(ctx, cid, err)
 	}
 
-	if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
-		r.Status = store.StatusUnpinSucceeded
-		r.UnpinSucceededAt = time.Now().UnixMilli()
-		return nil
-	}); err != nil {
-		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
-		return err
+	if err := w.store.DeleteExpireIndex(ctx, cid); err != nil {
+		log.Log.Sugar().Errorf("Unpin[%s] delete expire index err: %v", cid, err)
 	}
-
-	if err = w.store.DeleteExpireIndex(ctx, cid); err != nil {
-		log.Log.Sugar().Errorf("Failed to delete expire index for %s: %v", cid, err)
-	}
-
 	return nil
 }
 
-func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, err error) error {
-	log.Log.Sugar().Errorf("Unpin operation failed for %s: %v", cid, err)
+var (
+	ErrUnpinRetry = errors.New("unpin retry")
+)
 
-	if e := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr error) error {
+	log.Log.Sugar().Errorf("Unpin[%s] fail with err: %v", cid, unpinErr)
+
+	var unpinAttemptCount int32
+	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		r.LastUpdateAt = time.Now().UnixMilli()
 		r.UnpinAttemptCount++
+		unpinAttemptCount = r.UnpinAttemptCount
 		if r.UnpinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
 			r.Status = store.StatusDeadLetter
-			return nil
 		}
-		r.Status = store.StatusScheduledForUnpin
 		return nil
-	}); e != nil {
-		return e
+	}); err != nil {
+		return err
 	}
 
-	rec, _ := w.store.Get(ctx, cid)
-	if rec != nil && rec.UnpinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
-		return errors.New("retry unpin")
+	if unpinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+		return ErrUnpinRetry
 	}
+
+	log.Log.Sugar().Warnf("Unpin[%s] out of max retry", cid)
 	return nil
 }

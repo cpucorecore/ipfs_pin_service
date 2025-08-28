@@ -25,7 +25,6 @@ type Store interface {
 	Get(ctx context.Context, cid string) (*store.PinRecord, error)
 	Put(ctx context.Context, rec *store.PinRecord) error
 	Update(ctx context.Context, cid string, apply func(*store.PinRecord) error) error
-	Upsert(ctx context.Context, cid string, init func(*store.PinRecord), apply func(*store.PinRecord) error) (*store.PinRecord, bool, error)
 }
 
 type MessageQueue interface {

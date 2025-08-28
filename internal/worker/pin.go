@@ -41,7 +41,7 @@ func NewPinWorker(
 }
 
 func (w *PinWorker) Start(ctx context.Context) error {
-	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Pin.Queue, w.cfg.Workers.PinConcurrency, w.handleMessage)
+	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Pin.Queue, w.cfg.Workers.PinConcurrency, w.handlePinMessage)
 }
 
 type PinRequestMsg struct {
@@ -49,115 +49,111 @@ type PinRequestMsg struct {
 	Size int64  `json:"size"`
 }
 
-func (w *PinWorker) handleMessage(ctx context.Context, body []byte) error {
+func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	var req PinRequestMsg
 	if err := json.Unmarshal(body, &req); err != nil {
-		log.Log.Sugar().Errorf("Failed to unmarshal request message: %v", err)
+		log.Log.Sugar().Errorf("PinWorker parse request[%s] err: %v", string(body), err)
 		return err
 	}
 
 	if !util.CheckCid(req.Cid) {
-		log.Log.Sugar().Warnf("Warning: wrong pin cid: %s", req.Cid)
+		log.Log.Sugar().Warnf("PinWorker check cid[%s] fail", req.Cid)
 		return nil
 	}
 
 	cid := req.Cid
-
-	now := time.Now().UnixMilli()
-
-	rec, _, err := w.store.Upsert(ctx, cid,
-		func(r *store.PinRecord) {
-			r.Cid = cid
-			r.Status = store.StatusReceived
-			r.ReceivedAt = now
-			r.LastUpdateAt = now
-			r.Size = req.Size
-		},
-		func(r *store.PinRecord) error {
-			r.Size = req.Size
-			r.LastUpdateAt = now
-			return nil
-		},
-	)
+	nowUnixMilli := time.Now().UnixMilli()
+	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {
-		log.Log.Sugar().Errorf("Failed to upsert record %s: %v", cid, err)
-		return err
-	}
-
-	size := rec.GetSize()
-	if req.Size > 0 {
-		size = req.Size
-	}
-
-	if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
-		r.Status = store.StatusPinning
-		r.PinStartAt = time.Now().UnixMilli()
-		return nil
-	}); err != nil {
-		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
-		return err
-	}
-
-	ttl, bucket := w.policy.ComputeWithBucket(size)
-
-	log.Log.Sugar().Infof("Starting pin operation for CID: %s", cid)
-	// Add per-operation timeout if configured
-	ctxPin := ctx
-	var cancel context.CancelFunc
-	if w.cfg.Workers.PinTimeout > 0 {
-		ctxPin, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
-		defer cancel()
-	}
-	start := time.Now()
-	err = w.ipfs.PinAdd(ctxPin, cid)
-	monitor.ObserveOperation(monitor.OpPinAdd, time.Since(start), err)
-	if err != nil {
-		log.Log.Sugar().Errorf("Failed to pin CID %s: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
-	log.Log.Sugar().Infof("Successfully pinned CID: %s", cid)
 
-	t := time.Now()
-	if _, _, err = w.store.Upsert(ctx, cid, nil, func(r *store.PinRecord) error {
+	if pinRecord == nil {
+		pinRecord = &store.PinRecord{
+			Cid:          cid,
+			Status:       store.StatusReceived,
+			ReceivedAt:   nowUnixMilli,
+			LastUpdateAt: nowUnixMilli,
+			Size:         req.Size,
+		}
+	} else {
+		if req.Size > 0 {
+			pinRecord.Size = req.Size
+		}
+		pinRecord.LastUpdateAt = nowUnixMilli
+	}
+
+	pinCtx := ctx
+	var cancel context.CancelFunc
+	if w.cfg.Workers.PinTimeout > 0 {
+		pinCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
+		defer cancel()
+	}
+
+	pinRecord.Status = store.StatusPinning
+	pinRecord.PinStartAt = time.Now().UnixMilli()
+	err = w.store.Put(pinCtx, pinRecord)
+	if err != nil {
+		return w.handlePinError(ctx, cid, err)
+	}
+
+	log.Log.Sugar().Infof("Pin[%s] pin start", cid)
+	pinStartTime := time.Now()
+	err = w.ipfs.PinAdd(pinCtx, cid)
+	pinEndTime := time.Now()
+	if err != nil {
+		return w.handlePinError(ctx, cid, err)
+	}
+
+	duration := pinEndTime.Sub(pinStartTime)
+	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
+	log.Log.Sugar().Infof("Pin[%s] pin finish in %s", cid, duration)
+
+	size := pinRecord.GetSize()
+	ttl, bucket := w.policy.ComputeTTL(size)
+	log.Log.Sugar().Infof("Pin[%s] size[%d] >> bucket[%s]", cid, size, bucket)
+
+	if err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
-		r.PinSucceededAt = t.UnixMilli()
-		r.ExpireAt = t.Add(ttl).UnixMilli()
+		r.PinSucceededAt = pinEndTime.UnixMilli()
+		r.ExpireAt = pinEndTime.Add(ttl).UnixMilli()
 		return nil
 	}); err != nil {
-		log.Log.Sugar().Errorf("Failed to update record status: %v", err)
-		return err
+		return w.handlePinError(ctx, cid, err)
 	}
+
+	log.Log.Sugar().Infof("Pin[%s] finish", cid)
 
 	monitor.ObserveFileSize(size)
 	monitor.ObserveTTLBucket(bucket)
-
 	return nil
 }
 
-func (w *PinWorker) handlePinError(ctx context.Context, cid string, err error) error {
-	log.Log.Sugar().Errorf("Pin operation failed for %s: %v", cid, err)
+var (
+	ErrPinRetry = errors.New("pin retry")
+)
 
-	// Update attempt count and decide whether to retry (return error) or stop (ack with dead letter)
-	updateErr := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error) error {
+	log.Log.Sugar().Errorf("Pin[%s] err: %v", cid, pinErr)
+
+	var pinAttemptCount int32
+	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		r.LastUpdateAt = time.Now().UnixMilli()
 		r.PinAttemptCount++
-
+		pinAttemptCount = r.PinAttemptCount
 		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
 			r.Status = store.StatusDeadLetter
-			return nil
 		}
-
-		// keep in Pinning for retry
-		r.Status = store.StatusPinning
 		return nil
 	})
-	if updateErr != nil {
-		return updateErr
+	if err != nil {
+		return err
 	}
-	// If still under max retries, return non-nil to trigger DLX retry
-	rec, _ := w.store.Get(ctx, cid)
-	if rec != nil && rec.PinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
-		return errors.New("retry pin")
+
+	if pinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+		return ErrPinRetry
 	}
-	// Max retries reached; ack (nil) and keep DeadLetter status
+
+	log.Log.Sugar().Infof("Pin[%s] out of max retry", cid)
 	return nil
 }

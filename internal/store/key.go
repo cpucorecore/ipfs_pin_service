@@ -9,9 +9,8 @@ import (
 )
 
 var (
-	ExpireStartKey    = []byte(prefixExpire + "/")
+	ExpireStartKey    = []byte(prefixPinExpire + "/")
 	ExpireStartKeyLen = 2
-	CidV2Len          = 59
 )
 
 func makePinRecordKey(cid string) []byte {
@@ -19,7 +18,7 @@ func makePinRecordKey(cid string) []byte {
 }
 
 func makeStatusPrefix(status Status) []byte {
-	return []byte(fmt.Sprintf("%s/%02d/", prefixStatus, status))
+	return []byte(fmt.Sprintf("%s/%02d/", prefixPinStatus, status))
 }
 
 func makeStatusKey(status Status, ts int64, cid string) []byte {
@@ -58,7 +57,7 @@ func parseExpireKey(key []byte) (ts int64, cid string, err error) {
 		return 0, "", ErrInvalidExpireKey
 	}
 
-	if string(parts[0]) != prefixExpire {
+	if string(parts[0]) != prefixPinExpire {
 		return 0, "", ErrWrongExpirePrefix
 	}
 

@@ -53,11 +53,11 @@ func main() {
 		}
 	}()
 
-	st, err := store.NewPebbleStore(".db")
+	pebbleStore, err := store.NewPebbleStore(".db")
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create store: %v", err)
 	}
-	defer st.Close()
+	defer pebbleStore.Close()
 
 	mq, err := queue.NewRabbitMQ(cfg)
 	if err != nil {
@@ -66,20 +66,20 @@ func main() {
 	defer mq.Close()
 
 	f := filter.New(cfg)
-	server := api.NewServer(st, mq, f)
+	server := api.NewServer(pebbleStore, mq, f)
 	router := gin.Default()
 	server.Routes(router)
 	monitor.RegisterMetricsRoute(router)
 
 	policy := ttl.NewPolicy(cfg)
 	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
-	pinWorker := worker.NewPinWorker(st, mq, ipfsClient, policy, cfg)
-	unpinWorker := worker.NewUnpinWorker(st, mq, ipfsClient, cfg)
+	pinWorker := worker.NewPinWorker(pebbleStore, mq, ipfsClient, policy, cfg)
+	unpinWorker := worker.NewUnpinWorker(pebbleStore, mq, ipfsClient, cfg)
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
 	statWorker := worker.NewStatWorker(ipfsClient, cfg)
 	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
 	queueMonitor := worker.NewQueueMonitor(mq, cfg)
-	ttlChecker := worker.NewTTLChecker(st, mq, cfg)
+	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

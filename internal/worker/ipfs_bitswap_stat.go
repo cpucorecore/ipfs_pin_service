@@ -50,12 +50,5 @@ func (w *BitswapStatWorker) run(ctx context.Context) error {
 		bs.DupBlksReceived, bs.DupDataReceived,
 		bs.MessagesReceived,
 	)
-	log.Log.Sugar().Infof("Bitswap stat: peers=%d, wantlist=%d, br=%d, bs=%d, dr=%d, ds=%d, dbr=%d, ddr=%d, msgs=%d. api duration=%f seconds",
-		len(bs.Peers), len(wantList),
-		bs.BlocksReceived, bs.BlocksSent,
-		bs.DataReceived, bs.DataSent,
-		bs.DupBlksReceived, bs.DupDataReceived,
-		bs.MessagesReceived, time.Since(start).Seconds(),
-	)
 	return nil
 }
