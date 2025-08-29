@@ -110,7 +110,6 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 
 	var unpinAttemptCount int32
 	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.LastUpdateAt = time.Now().UnixMilli()
 		r.UnpinAttemptCount++
 		unpinAttemptCount = r.UnpinAttemptCount
 		if r.UnpinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {

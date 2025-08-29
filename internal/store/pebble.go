@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	pb "github.com/cpucorecore/ipfs_pin_service/proto"
 	"google.golang.org/protobuf/proto"
+	"time"
 )
 
 const (
@@ -51,6 +52,8 @@ func (s *PebbleStore) Get(ctx context.Context, cid string) (*PinRecord, error) {
 func (s *PebbleStore) Put(ctx context.Context, pinRecord *PinRecord) error {
 	batch := s.db.NewBatch()
 	defer batch.Close()
+
+	pinRecord.LastUpdateAt = time.Now().UnixMilli()
 
 	bytes, err := proto.Marshal(pinRecord)
 	if err != nil {
@@ -105,6 +108,7 @@ func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*PinRec
 		return err
 	}
 
+	pinRecord.LastUpdateAt = time.Now().UnixMilli()
 	bytes, err := proto.Marshal(pinRecord)
 	if err != nil {
 		return err

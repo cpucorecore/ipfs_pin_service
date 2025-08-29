@@ -75,72 +75,32 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	now := time.Now().UnixMilli()
 	if rec == nil {
 		rec = &store.PinRecord{
-			Cid:          cidStr,
-			Status:       store.StatusReceived,
-			ReceivedAt:   now,
-			LastUpdateAt: now,
+			Cid:        cidStr,
+			Status:     store.StatusReceived,
+			ReceivedAt: now,
 		}
 		if size > 0 {
 			rec.Size = size
 		}
 	} else {
-		// 处理已存在的记录
 		switch rec.Status {
 		case store.StatusUnpinSucceeded, store.StatusDeadLetter:
-			// 已完成完整生命周期的记录，将当前状态存入历史，重置为首次请求状态
-			historyRecord := &store.PinRecord{
-				Cid:               rec.Cid,
-				Status:            rec.Status,
-				ReceivedAt:        rec.ReceivedAt,
-				EnqueuedAt:        rec.EnqueuedAt,
-				PinStartAt:        rec.PinStartAt,
-				PinSucceededAt:    rec.PinSucceededAt,
-				ExpireAt:          rec.ExpireAt,
-				ScheduleUnpinAt:   rec.ScheduleUnpinAt,
-				UnpinStartAt:      rec.UnpinStartAt,
-				UnpinSucceededAt:  rec.UnpinSucceededAt,
-				LastUpdateAt:      rec.LastUpdateAt,
-				Size:              rec.Size,
-				PinAttemptCount:   rec.PinAttemptCount,
-				UnpinAttemptCount: rec.UnpinAttemptCount,
-				SizeLimit:         rec.SizeLimit,
-				History:           rec.History, // 保留原有历史
-			}
-
-			// 重置为首次请求状态
+			historyPinRecord := store.ClonePinRecord(rec)
+			store.ResetPinRecordDynamicState(rec)
 			rec.Status = store.StatusReceived
 			rec.ReceivedAt = now
-			rec.EnqueuedAt = 0
-			rec.PinStartAt = 0
-			rec.PinSucceededAt = 0
-			rec.ExpireAt = 0
-			rec.ScheduleUnpinAt = 0
-			rec.UnpinStartAt = 0
-			rec.UnpinSucceededAt = 0
-			rec.LastUpdateAt = now
-			rec.PinAttemptCount = 0
-			rec.UnpinAttemptCount = 0
-			rec.SizeLimit = 0
+			store.AppendHistoryPinRecord(rec, historyPinRecord)
 
-			// 将历史记录添加到历史数组
-			if rec.History == nil {
-				rec.History = []*store.PinRecord{}
-			}
-			rec.History = append(rec.History, historyRecord)
-
-			// 更新大小（如果提供了新的大小）
 			if size > 0 {
 				rec.Size = size
 			}
 
 		case store.StatusFiltered:
-			// 过滤状态，直接记录日志并跳过
 			log.Log.Sugar().Infof("CID %s is filtered, skipping renewal", cidStr)
 			c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 			return
 
 		default:
-			// 其他状态（处理中），直接返回当前状态，不做任何处理
 			c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, view_model.TimeFormatISO))
 			return
 		}
@@ -149,8 +109,6 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	if s.filter.ShouldFilter(size) {
 		rec.Status = store.StatusFiltered
 		rec.SizeLimit = s.filter.SizeLimit()
-		rec.LastUpdateAt = now
-
 		if err = s.store.Put(c, rec); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

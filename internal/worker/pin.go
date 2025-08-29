@@ -62,7 +62,6 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	}
 
 	cid := req.Cid
-	nowUnixMilli := time.Now().UnixMilli()
 	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
@@ -70,17 +69,15 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 
 	if pinRecord == nil {
 		pinRecord = &store.PinRecord{
-			Cid:          cid,
-			Status:       store.StatusReceived,
-			ReceivedAt:   nowUnixMilli,
-			LastUpdateAt: nowUnixMilli,
-			Size:         req.Size,
+			Cid:        cid,
+			Status:     store.StatusReceived,
+			ReceivedAt: time.Now().UnixMilli(),
+			Size:       req.Size,
 		}
 	} else {
 		if req.Size > 0 {
 			pinRecord.Size = req.Size
 		}
-		pinRecord.LastUpdateAt = nowUnixMilli
 	}
 
 	pinCtx := ctx
@@ -138,7 +135,6 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 
 	var pinAttemptCount int32
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.LastUpdateAt = time.Now().UnixMilli()
 		r.PinAttemptCount++
 		pinAttemptCount = r.PinAttemptCount
 		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {

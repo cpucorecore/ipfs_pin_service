@@ -3,3 +3,44 @@ package store
 import pb "github.com/cpucorecore/ipfs_pin_service/proto"
 
 type PinRecord = pb.PinRecord
+
+func ClonePinRecord(pinRecord *PinRecord) *PinRecord {
+	return &PinRecord{
+		Cid:               pinRecord.Cid,
+		Status:            pinRecord.Status,
+		ReceivedAt:        pinRecord.ReceivedAt,
+		EnqueuedAt:        pinRecord.EnqueuedAt,
+		PinStartAt:        pinRecord.PinStartAt,
+		PinSucceededAt:    pinRecord.PinSucceededAt,
+		ExpireAt:          pinRecord.ExpireAt,
+		ScheduleUnpinAt:   pinRecord.ScheduleUnpinAt,
+		UnpinStartAt:      pinRecord.UnpinStartAt,
+		UnpinSucceededAt:  pinRecord.UnpinSucceededAt,
+		LastUpdateAt:      pinRecord.LastUpdateAt,
+		Size:              pinRecord.Size,
+		PinAttemptCount:   pinRecord.PinAttemptCount,
+		UnpinAttemptCount: pinRecord.UnpinAttemptCount,
+		SizeLimit:         pinRecord.SizeLimit,
+	}
+}
+
+func ResetPinRecordDynamicState(pinRecord *PinRecord) {
+	pinRecord.Status = StatusUnknown
+	pinRecord.ReceivedAt = 0
+	pinRecord.EnqueuedAt = 0
+	pinRecord.PinStartAt = 0
+	pinRecord.PinSucceededAt = 0
+	pinRecord.ExpireAt = 0
+	pinRecord.ScheduleUnpinAt = 0
+	pinRecord.UnpinStartAt = 0
+	pinRecord.UnpinSucceededAt = 0
+	pinRecord.PinAttemptCount = 0
+	pinRecord.UnpinAttemptCount = 0
+}
+
+func AppendHistoryPinRecord(pinRecord *PinRecord, historyPinRecord *PinRecord) {
+	if pinRecord.History == nil {
+		pinRecord.History = make([]*PinRecord, 0, 1)
+	}
+	pinRecord.History = append(pinRecord.History, historyPinRecord)
+}

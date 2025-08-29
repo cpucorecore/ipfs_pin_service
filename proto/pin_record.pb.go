@@ -38,7 +38,7 @@ type PinRecord struct {
 	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
 	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
 	SizeLimit         int64                  `protobuf:"varint,15,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
-	History           []*PinRecord           `protobuf:"bytes,16,rep,name=history,proto3" json:"history,omitempty"` // 历史状态记录
+	History           []*PinRecord           `protobuf:"bytes,16,rep,name=history,proto3" json:"history,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
