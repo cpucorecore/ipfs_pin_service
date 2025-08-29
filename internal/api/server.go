@@ -124,6 +124,8 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
+	pinRecord.Status = store.StatusEnqueued
+	pinRecord.EnqueuedAt = time.Now().UnixMilli()
 	if err = s.store.Put(c, pinRecord); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

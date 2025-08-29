@@ -99,4 +99,19 @@ func TestHandlePutPin_NonFiltered_Enqueue(t *testing.T) {
 	if payload["cid"].(string) != "bafybeihtsfujfh73od4mr47jt24we7b6e77xx4c45ozegyjjvprltzhobi" {
 		t.Fatalf("unexpected payload")
 	}
+
+	// 验证状态更新
+	rec := fs.m["bafybeihtsfujfh73od4mr47jt24we7b6e77xx4c45ozegyjjvprltzhobi"]
+	if rec == nil {
+		t.Fatalf("expected record to be stored")
+	}
+	if rec.Status != store.StatusEnqueued {
+		t.Fatalf("expected status %d, got %d", store.StatusEnqueued, rec.Status)
+	}
+	if rec.EnqueuedAt == 0 {
+		t.Fatalf("expected EnqueuedAt to be set")
+	}
+	if rec.ReceivedAt == 0 {
+		t.Fatalf("expected ReceivedAt to be set")
+	}
 }

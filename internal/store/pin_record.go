@@ -40,8 +40,8 @@ func ResetPinRecordDynamicState(pinRecord *PinRecord, historyLen int) {
 }
 
 func AppendHistory(pinRecord *PinRecord, lastPinRecord *PinRecord, history []*PinRecord) {
-	pinRecord.History = append(pinRecord.History, lastPinRecord)
 	if len(history) > 0 {
 		pinRecord.History = append(pinRecord.History, history...)
 	}
+	pinRecord.History = append(pinRecord.History, lastPinRecord)
 }
