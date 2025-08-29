@@ -4,7 +4,7 @@ import pb "github.com/cpucorecore/ipfs_pin_service/proto"
 
 type PinRecord = pb.PinRecord
 
-func ClonePinRecord(pinRecord *PinRecord) *PinRecord {
+func ClonePinRecord(pinRecord *PinRecord) (*PinRecord, []*PinRecord) {
 	return &PinRecord{
 		Cid:               pinRecord.Cid,
 		Status:            pinRecord.Status,
@@ -21,10 +21,10 @@ func ClonePinRecord(pinRecord *PinRecord) *PinRecord {
 		PinAttemptCount:   pinRecord.PinAttemptCount,
 		UnpinAttemptCount: pinRecord.UnpinAttemptCount,
 		SizeLimit:         pinRecord.SizeLimit,
-	}
+	}, pinRecord.History
 }
 
-func ResetPinRecordDynamicState(pinRecord *PinRecord) {
+func ResetPinRecordDynamicState(pinRecord *PinRecord, historyLen int) {
 	pinRecord.Status = StatusUnknown
 	pinRecord.ReceivedAt = 0
 	pinRecord.EnqueuedAt = 0
@@ -36,11 +36,12 @@ func ResetPinRecordDynamicState(pinRecord *PinRecord) {
 	pinRecord.UnpinSucceededAt = 0
 	pinRecord.PinAttemptCount = 0
 	pinRecord.UnpinAttemptCount = 0
+	pinRecord.History = make([]*pb.PinRecord, 0, historyLen)
 }
 
-func AppendHistoryPinRecord(pinRecord *PinRecord, historyPinRecord *PinRecord) {
-	if pinRecord.History == nil {
-		pinRecord.History = make([]*PinRecord, 0, 1)
+func AppendHistory(pinRecord *PinRecord, lastPinRecord *PinRecord, history []*PinRecord) {
+	pinRecord.History = append(pinRecord.History, lastPinRecord)
+	if len(history) > 0 {
+		pinRecord.History = append(pinRecord.History, history...)
 	}
-	pinRecord.History = append(pinRecord.History, historyPinRecord)
 }

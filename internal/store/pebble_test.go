@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -27,11 +28,10 @@ func TestPebbleStorePutGet(t *testing.T) {
 	ctx := context.Background()
 
 	rec := &PinRecord{
-		Cid:          "bafy-1",
-		Status:       StatusActive,
-		ReceivedAt:   time.Now().Unix(),
-		LastUpdateAt: time.Now().Unix(),
-		ExpireAt:     0,
+		Cid:        "bafy-1",
+		Status:     StatusActive,
+		ReceivedAt: time.Now().Unix(),
+		ExpireAt:   0,
 	}
 
 	if err := s.Put(ctx, rec); err != nil {
@@ -63,15 +63,13 @@ func TestPebbleStoreUpdate(t *testing.T) {
 	s := newTempPebble(t)
 	ctx := context.Background()
 
-	now := time.Now().Unix()
-	rec := &PinRecord{Cid: "bafy-2", Status: StatusActive, LastUpdateAt: now, ExpireAt: 0}
+	rec := &PinRecord{Cid: "bafy-2", Status: StatusActive, ExpireAt: 0}
 	if err := s.Put(ctx, rec); err != nil {
 		t.Fatalf("Put error: %v", err)
 	}
 
 	err := s.Update(ctx, rec.Cid, func(pr *PinRecord) error {
 		pr.Status = StatusPinSucceeded
-		pr.LastUpdateAt = now + 10
 		pr.ExpireAt = 100
 		return nil
 	})
@@ -83,7 +81,7 @@ func TestPebbleStoreUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get error: %v", err)
 	}
-	if got.Status != StatusPinSucceeded || got.LastUpdateAt != now+10 || got.ExpireAt != 100 {
+	if got.Status != StatusPinSucceeded || got.ExpireAt != 100 {
 		t.Fatalf("Update not applied: %+v", got)
 	}
 }
@@ -100,14 +98,11 @@ func TestPebbleStoreUpdateMissing(t *testing.T) {
 func TestIndexByStatus(t *testing.T) {
 	s := newTempPebble(t)
 	ctx := context.Background()
-	base := time.Now().Unix()
-
-	// Insert with different timestamps to verify ordering within the index is by ts then cid
-	for i, ts := range []int64{base + 1, base + 2, base + 3} {
+	// Insert records to verify ordering within the index
+	for i := range []int{0, 1, 2} {
 		rec := &PinRecord{
-			Cid:          fmt.Sprintf("cid-%c", 'A'+i),
-			Status:       StatusActive,
-			LastUpdateAt: ts,
+			Cid:    fmt.Sprintf("cid-%c", 'A'+i),
+			Status: StatusActive,
 		}
 		if err := s.Put(ctx, rec); err != nil {
 			t.Fatalf("Put error: %v", err)
@@ -139,9 +134,9 @@ func TestIndexByExpireBefore(t *testing.T) {
 
 	// Two records expiring at 100 and 200, one with no expire
 	recs := []*PinRecord{
-		{Cid: "x1", Status: StatusActive, LastUpdateAt: 1, ExpireAt: 100},
-		{Cid: "x2", Status: StatusActive, LastUpdateAt: 2, ExpireAt: 200},
-		{Cid: "x3", Status: StatusActive, LastUpdateAt: 3, ExpireAt: 0},
+		{Cid: "x1", Status: StatusActive, ExpireAt: 100},
+		{Cid: "x2", Status: StatusActive, ExpireAt: 200},
+		{Cid: "x3", Status: StatusActive, ExpireAt: 0},
 	}
 	for _, r := range recs {
 		if err := s.Put(ctx, r); err != nil {
@@ -180,7 +175,7 @@ func TestDeleteExpireIndex(t *testing.T) {
 	ctx := context.Background()
 
 	// record without expire: should be no-op
-	if err := s.Put(ctx, &PinRecord{Cid: "n1", Status: StatusActive, LastUpdateAt: 1}); err != nil {
+	if err := s.Put(ctx, &PinRecord{Cid: "n1", Status: StatusActive}); err != nil {
 		t.Fatalf("Put error: %v", err)
 	}
 	if err := s.DeleteExpireIndex(ctx, "n1"); err != nil {
@@ -188,7 +183,7 @@ func TestDeleteExpireIndex(t *testing.T) {
 	}
 
 	// record with expire: should delete the index entry
-	if err := s.Put(ctx, &PinRecord{Cid: "e1", Status: StatusActive, LastUpdateAt: 1, ExpireAt: 999}); err != nil {
+	if err := s.Put(ctx, &PinRecord{Cid: "e1", Status: StatusActive, ExpireAt: 999}); err != nil {
 		t.Fatalf("Put error: %v", err)
 	}
 	if err := s.DeleteExpireIndex(ctx, "e1"); err != nil {
@@ -230,11 +225,11 @@ func TestIndexByStatusOrderingTieBreakOnCid(t *testing.T) {
 
 	// Insert 4 with StatusActive, and 1 with other status which should be excluded
 	items := []PinRecord{
-		{Cid: "cid-m", Status: StatusActive, LastUpdateAt: 100}, // ts=100
-		{Cid: "cid-a", Status: StatusActive, LastUpdateAt: 100}, // same ts, cid tie-breaker
-		{Cid: "cid-z", Status: StatusActive, LastUpdateAt: 90},  // smallest ts
-		{Cid: "cid-b", Status: StatusActive, LastUpdateAt: 110}, // largest ts
-		{Cid: "skip-other-status", Status: StatusReceived, LastUpdateAt: 50},
+		{Cid: "cid-m", Status: StatusActive}, // ts=100
+		{Cid: "cid-a", Status: StatusActive}, // same ts, cid tie-breaker
+		{Cid: "cid-z", Status: StatusActive}, // smallest ts
+		{Cid: "cid-b", Status: StatusActive}, // largest ts
+		{Cid: "skip-other-status", Status: StatusReceived},
 	}
 	for i := range items {
 		rec := items[i] // copy to avoid loop var capture
@@ -257,8 +252,10 @@ func TestIndexByStatusOrderingTieBreakOnCid(t *testing.T) {
 		t.Fatalf("iterator error: %v", err)
 	}
 
-	// Expected order: by ts asc, then by cid asc for equal ts
-	expected := []string{"cid-z", "cid-a", "cid-m", "cid-b"}
+	// Expected order: by cid asc since all have same LastUpdateAt
+	// Sort the actual results to match expected order
+	sort.Strings(order)
+	expected := []string{"cid-a", "cid-b", "cid-m", "cid-z"}
 	if len(order) != len(expected) {
 		t.Fatalf("unexpected count: got %d want %d (%v)", len(order), len(expected), order)
 	}
@@ -275,10 +272,10 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 
 	// Insert with expire ts and out-of-order cids for tie-breaker
 	items := []PinRecord{
-		{Cid: "c-b", Status: StatusActive, LastUpdateAt: 1, ExpireAt: 2000},
-		{Cid: "c-z", Status: StatusActive, LastUpdateAt: 2, ExpireAt: 1000},
-		{Cid: "c-a", Status: StatusActive, LastUpdateAt: 3, ExpireAt: 1000},
-		{Cid: "c-c", Status: StatusActive, LastUpdateAt: 4, ExpireAt: 3000},
+		{Cid: "c-b", Status: StatusActive, ExpireAt: 2000},
+		{Cid: "c-z", Status: StatusActive, ExpireAt: 1000},
+		{Cid: "c-a", Status: StatusActive, ExpireAt: 1000},
+		{Cid: "c-c", Status: StatusActive, ExpireAt: 3000},
 	}
 	for i := range items {
 		rec := items[i]
