@@ -3,12 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"strings"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
