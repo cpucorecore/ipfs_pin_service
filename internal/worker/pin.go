@@ -71,63 +71,58 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		pinRecord = &store.PinRecord{
 			Cid:        cid,
 			Status:     store.StatusReceived,
-			ReceivedAt: time.Now().UnixMilli(),
 			Size:       req.Size,
+			ReceivedAt: time.Now().UnixMilli(),
 		}
-	} else {
-		if req.Size > 0 {
-			pinRecord.Size = req.Size
+		err = w.store.Put(ctx, pinRecord)
+		if err != nil {
+			return w.handlePinError(ctx, cid, err)
 		}
 	}
-
-	pinCtx := ctx
-	var cancel context.CancelFunc
-	if w.cfg.Workers.PinTimeout > 0 {
-		pinCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
-		defer cancel()
-	}
+	pinRecord.Size = req.Size
 
 	pinRecord.Status = store.StatusPinning
 	pinRecord.PinStartAt = time.Now().UnixMilli()
-	err = w.store.Put(pinCtx, pinRecord)
+	err = w.store.Put(ctx, pinRecord)
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	log.Log.Sugar().Infof("Pin[%s] pin start", cid)
+	log.Log.Sugar().Infof("Pin[%s] start", cid)
+	timeoutCtx := ctx
+	var cancel context.CancelFunc
+	if w.cfg.Workers.PinTimeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
+		defer cancel()
+	}
 	pinStartTime := time.Now()
-	err = w.ipfs.PinAdd(pinCtx, cid)
+	err = w.ipfs.PinAdd(timeoutCtx, cid)
 	pinEndTime := time.Now()
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
-
 	duration := pinEndTime.Sub(pinStartTime)
 	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
-	log.Log.Sugar().Infof("Pin[%s] pin finish in %s", cid, duration)
+	log.Log.Sugar().Infof("Pin[%s] ipfs done: %s", cid, duration)
 
-	size := pinRecord.GetSize()
-	ttl, bucket := w.policy.ComputeTTL(size)
-	log.Log.Sugar().Infof("Pin[%s] size[%d] >> bucket[%s]", cid, size, bucket)
-
+	ttl, bucket := w.policy.ComputeTTL(pinRecord.Size)
 	expireAt := pinEndTime.Add(ttl).UnixMilli()
-	if err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
 		r.PinSucceededAt = pinEndTime.UnixMilli()
 		r.ExpireAt = expireAt
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
 
 	if err = w.store.AddExpireIndex(ctx, cid, expireAt); err != nil {
-		log.Log.Sugar().Errorf("Pin[%s] add expire index failed: %v", cid, err)
+		log.Log.Sugar().Errorf("Pin[%s] add expire index err: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
-
-	log.Log.Sugar().Infof("Pin[%s] finish", cid)
-
-	monitor.ObserveFileSize(size)
+	log.Log.Sugar().Infof("Pin[%s] done", cid)
+	monitor.ObserveFileSize(pinRecord.Size)
 	monitor.ObserveTTLBucket(bucket)
 	return nil
 }

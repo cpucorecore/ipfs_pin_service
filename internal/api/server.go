@@ -71,11 +71,9 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	if pinRecord == nil {
 		pinRecord = &store.PinRecord{
 			Cid:        cidStr,
+			Size:       size,
 			Status:     store.StatusReceived,
 			ReceivedAt: now,
-		}
-		if size > 0 {
-			pinRecord.Size = size
 		}
 	} else {
 		switch pinRecord.Status {
@@ -83,12 +81,9 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			lastPinRecord, history := store.ClonePinRecord(pinRecord)
 			store.ResetPinRecordDynamicState(pinRecord, 1+len(history))
 			pinRecord.Status = store.StatusReceived
+			pinRecord.Size = size
 			pinRecord.ReceivedAt = now
 			store.AppendHistory(pinRecord, lastPinRecord, history)
-
-			if size > 0 {
-				pinRecord.Size = size
-			}
 
 		case store.StatusFiltered:
 			log.Log.Sugar().Infof("CID %s is filtered, skipping renewal", cidStr)
