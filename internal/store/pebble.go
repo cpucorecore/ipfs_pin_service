@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 	pb "github.com/cpucorecore/ipfs_pin_service/proto"
 	"google.golang.org/protobuf/proto"
 	"time"
@@ -180,6 +181,20 @@ func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string) error {
 	}
 
 	return s.db.Delete(makeExpireKey(rec.ExpireAt, cid), pebble.Sync)
+}
+
+func (s *PebbleStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
+	rec, err := s.Get(ctx, cid)
+	if err != nil {
+		return "", err
+	}
+	if rec == nil || rec.ExpireAt == 0 {
+		return "", nil
+	}
+	expireKey := makeExpireKey(rec.ExpireAt, cid)
+	log.Log.Sugar().Debugf("get expire index key: %s", expireKey)
+	_, _, err = s.db.Get(expireKey)
+	return string(expireKey), err
 }
 
 func (s *PebbleStore) Close() error {

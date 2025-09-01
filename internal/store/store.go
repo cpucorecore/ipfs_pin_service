@@ -11,6 +11,7 @@ type Store interface {
 	IndexByStatus(ctx context.Context, s Status) (Iterator[string], error)
 	IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error)
 	DeleteExpireIndex(ctx context.Context, cid string) error
+	GetExpireIndex(ctx context.Context, cid string) (string, error)
 	Close() error
 }
 
