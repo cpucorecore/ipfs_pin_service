@@ -66,10 +66,7 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			continue
 		}
 
-		if pinRecord.Status != store.StatusActive && pinRecord.Status != store.StatusDeadLetter {
-			log.Log.Sugar().Warnf("unpin[%s] with wrong status[%d]", cid, pinRecord.Status)
-			continue
-		}
+		log.Log.Sugar().Infof("unpin[%s] with status[%d]", cid, pinRecord.Status)
 
 		err = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
 		if err != nil {
@@ -83,7 +80,12 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			return nil
 		})
 		if err != nil {
-			log.Log.Sugar().Errorf("store.Update(%s) err: %v", cid, err)
+			log.Log.Sugar().Errorf("update cid[%s] status[%d]: %v", cid, store.StatusScheduledForUnpin, err)
+			continue
+		}
+
+		if err = c.store.DeleteExpireIndex(ctx, cid); err != nil {
+			log.Log.Sugar().Errorf("store.DeleteExpireIndex(%s) err: %v", cid, err)
 		}
 	}
 	return nil

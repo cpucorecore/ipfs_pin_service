@@ -87,18 +87,11 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 }
 
 func (w *UnpinWorker) updateStoreUnpinSuccess(ctx context.Context, cid string, timestamp time.Time) error {
-	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
+	return w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinSucceeded
 		r.UnpinSucceededAt = timestamp.UnixMilli()
 		return nil
-	}); err != nil {
-		return w.handleUnpinError(ctx, cid, err)
-	}
-
-	if err := w.store.DeleteExpireIndex(ctx, cid); err != nil {
-		log.Log.Sugar().Errorf("Unpin[%s] delete expire index err: %v", cid, err)
-	}
-	return nil
+	})
 }
 
 var (
