@@ -79,7 +79,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	duration := unpinEndTime.Sub(unpinStartTime)
 	if err == nil || IsDuplicateUnpinError(err, cid) {
 		log.Log.Sugar().Infof("Unpin[%s] finish in %s", cid, duration)
-		monitor.ObserveOperation(monitor.OpPinRm, duration, err)
+		monitor.ObserveOperation(monitor.OpPinRm, duration, nil)
 		return w.updateStoreUnpinSuccess(ctx, cid, unpinEndTime)
 	}
 

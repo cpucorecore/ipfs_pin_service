@@ -66,7 +66,7 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			continue
 		}
 
-		log.Log.Sugar().Infof("unpin[%s] with status[%d]", cid, pinRecord.Status)
+		log.Log.Sugar().Infof("unpin[%s] with status[%d], expireAt[%d]", cid, pinRecord.Status, pinRecord.ExpireAt)
 
 		err = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
 		if err != nil {
@@ -84,8 +84,8 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			continue
 		}
 
-		if err = c.store.DeleteExpireIndex(ctx, cid); err != nil {
-			log.Log.Sugar().Errorf("store.DeleteExpireIndex(%s) err: %v", cid, err)
+		if err = c.store.RemoveExpireIndex(ctx, cid, pinRecord.ExpireAt); err != nil {
+			log.Log.Sugar().Errorf("remove expire index for cid[%s] failed: %v", cid, err)
 		}
 	}
 	return nil

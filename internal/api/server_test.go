@@ -22,6 +22,10 @@ func TestMain(m *testing.M) {
 
 type fakeStore struct{ m map[string]*store.PinRecord }
 
+func (f *fakeStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
+	return "", nil
+}
+
 type noop struct{}
 
 func (f *fakeStore) Get(ctx context.Context, cid string) (*store.PinRecord, error) {

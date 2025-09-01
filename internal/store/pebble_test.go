@@ -142,6 +142,12 @@ func TestIndexByExpireBefore(t *testing.T) {
 		if err := s.Put(ctx, r); err != nil {
 			t.Fatalf("Put error: %v", err)
 		}
+		// Add expire index since Put no longer does it automatically
+		if r.ExpireAt > 0 {
+			if err := s.AddExpireIndex(ctx, r.Cid, r.ExpireAt); err != nil {
+				t.Fatalf("AddExpireIndex error: %v", err)
+			}
+		}
 	}
 
 	cids, err := s.IndexByExpireBefore(ctx, 150, 10)
@@ -167,38 +173,6 @@ func TestIndexByExpireBefore(t *testing.T) {
 	}
 	if len(cids) != 1 {
 		t.Fatalf("unexpected limited result: %v", cids)
-	}
-}
-
-func TestDeleteExpireIndex(t *testing.T) {
-	s := newTempPebble(t)
-	ctx := context.Background()
-
-	// record without expire: should be no-op
-	if err := s.Put(ctx, &PinRecord{Cid: "n1", Status: StatusActive}); err != nil {
-		t.Fatalf("Put error: %v", err)
-	}
-	if err := s.DeleteExpireIndex(ctx, "n1"); err != nil {
-		t.Fatalf("DeleteExpireIndex error: %v", err)
-	}
-
-	// record with expire: should delete the index entry
-	if err := s.Put(ctx, &PinRecord{Cid: "e1", Status: StatusActive, ExpireAt: 999}); err != nil {
-		t.Fatalf("Put error: %v", err)
-	}
-	if err := s.DeleteExpireIndex(ctx, "e1"); err != nil {
-		t.Fatalf("DeleteExpireIndex error: %v", err)
-	}
-
-	// Verify the expire index key is gone by attempting to iterate before ts
-	cids, err := s.IndexByExpireBefore(ctx, 2000, 10)
-	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
-	}
-	for _, c := range cids {
-		if c == "e1" {
-			t.Fatalf("expire index for e1 should have been deleted")
-		}
 	}
 }
 
@@ -281,6 +255,12 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 		rec := items[i]
 		if err := s.Put(ctx, &rec); err != nil {
 			t.Fatalf("Put error: %v", err)
+		}
+		// Add expire index since Put no longer does it automatically
+		if rec.ExpireAt > 0 {
+			if err := s.AddExpireIndex(ctx, rec.Cid, rec.ExpireAt); err != nil {
+				t.Fatalf("AddExpireIndex error: %v", err)
+			}
 		}
 	}
 

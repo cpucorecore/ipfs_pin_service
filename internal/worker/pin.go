@@ -110,12 +110,18 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	ttl, bucket := w.policy.ComputeTTL(size)
 	log.Log.Sugar().Infof("Pin[%s] size[%d] >> bucket[%s]", cid, size, bucket)
 
+	expireAt := pinEndTime.Add(ttl).UnixMilli()
 	if err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
 		r.PinSucceededAt = pinEndTime.UnixMilli()
-		r.ExpireAt = pinEndTime.Add(ttl).UnixMilli()
+		r.ExpireAt = expireAt
 		return nil
 	}); err != nil {
+		return w.handlePinError(ctx, cid, err)
+	}
+
+	if err = w.store.AddExpireIndex(ctx, cid, expireAt); err != nil {
+		log.Log.Sugar().Errorf("Pin[%s] add expire index failed: %v", cid, err)
 		return w.handlePinError(ctx, cid, err)
 	}
 
