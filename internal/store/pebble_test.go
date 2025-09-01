@@ -150,26 +150,26 @@ func TestIndexByExpireBefore(t *testing.T) {
 		}
 	}
 
-	cids, err := s.IndexByExpireBefore(ctx, 150, 10)
+	cids, err := s.GetExpireCids(ctx, 150, 10)
 	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	if len(cids) != 1 || cids[0] != "x1" {
 		t.Fatalf("unexpected result: %v", cids)
 	}
 
-	cids, err = s.IndexByExpireBefore(ctx, 300, 10)
+	cids, err = s.GetExpireCids(ctx, 300, 10)
 	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	if len(cids) != 2 || cids[0] != "x1" || cids[1] != "x2" {
 		t.Fatalf("unexpected result: %v", cids)
 	}
 
 	// limit should restrict count
-	cids, err = s.IndexByExpireBefore(ctx, 300, 1)
+	cids, err = s.GetExpireCids(ctx, 300, 1)
 	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	if len(cids) != 1 {
 		t.Fatalf("unexpected limited result: %v", cids)
@@ -265,9 +265,9 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 	}
 
 	// Without tight upper bound to include all
-	got, err := s.IndexByExpireBefore(ctx, 9000, 10)
+	got, err := s.GetExpireCids(ctx, 9000, 10)
 	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	expected := []string{"c-a", "c-z", "c-b", "c-c"}
 	if len(got) != len(expected) {
@@ -280,9 +280,9 @@ func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
 	}
 
 	// Limit should respect the same ordering
-	got, err = s.IndexByExpireBefore(ctx, 9000, 2)
+	got, err = s.GetExpireCids(ctx, 9000, 2)
 	if err != nil {
-		t.Fatalf("IndexByExpireBefore error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	expectedLimited := []string{"c-a", "c-z"}
 	if len(got) != len(expectedLimited) || got[0] != expectedLimited[0] || got[1] != expectedLimited[1] {

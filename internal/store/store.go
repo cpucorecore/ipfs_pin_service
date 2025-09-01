@@ -8,11 +8,9 @@ type Store interface {
 	Get(ctx context.Context, cid string) (*PinRecord, error)
 	Put(ctx context.Context, rec *PinRecord) error
 	Update(ctx context.Context, cid string, apply func(*PinRecord) error) error
-	IndexByStatus(ctx context.Context, s Status) (Iterator[string], error)
-	IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error)
-	GetExpireIndex(ctx context.Context, cid string) (string, error)
 	AddExpireIndex(ctx context.Context, cid string, expireAt int64) error
-	RemoveExpireIndex(ctx context.Context, cid string, expireAt int64) error
+	DeleteExpireIndex(ctx context.Context, cid string, expireAt int64) error
+	GetExpireCids(ctx context.Context, ts int64, limit int) ([]string, error)
 	Close() error
 }
 

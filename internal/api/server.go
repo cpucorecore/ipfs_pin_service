@@ -16,23 +16,16 @@ import (
 )
 
 type Server struct {
-	store  Store
+	store  store.Store
 	queue  MessageQueue
 	filter *filter.Filter
-}
-
-type Store interface {
-	Get(ctx context.Context, cid string) (*store.PinRecord, error)
-	Put(ctx context.Context, rec *store.PinRecord) error
-	Update(ctx context.Context, cid string, apply func(*store.PinRecord) error) error
-	GetExpireIndex(ctx context.Context, cid string) (string, error)
 }
 
 type MessageQueue interface {
 	Enqueue(ctx context.Context, topic string, body []byte) error
 }
 
-func NewServer(store Store, queue MessageQueue, f *filter.Filter) *Server {
+func NewServer(store store.Store, queue MessageQueue, f *filter.Filter) *Server {
 	return &Server{
 		store:  store,
 		queue:  queue,
@@ -43,7 +36,6 @@ func NewServer(store Store, queue MessageQueue, f *filter.Filter) *Server {
 func (s *Server) Routes(r *gin.Engine) {
 	r.PUT("/pins/:cid", s.handlePutPin)
 	r.GET("/pins/:cid", s.handleGetPin)
-	r.GET("/expire/:cid", s.handleGetExpire)
 }
 
 func (s *Server) handlePutPin(c *gin.Context) {
@@ -172,25 +164,4 @@ func (s *Server) handleGetPin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, view_model.ConvertPinRecord(rec, format))
-}
-
-func (s *Server) handleGetExpire(c *gin.Context) {
-	cidStr := c.Param("cid")
-	if cidStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
-		return
-	}
-
-	if !util.CheckCid(cidStr) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
-		return
-	}
-
-	key, err := s.store.GetExpireIndex(c, cidStr)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"key": key})
 }

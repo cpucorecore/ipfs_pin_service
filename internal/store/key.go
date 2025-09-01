@@ -2,10 +2,14 @@ package store
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"strconv"
+)
+
+const (
+	prefixPinRecord = "p"
+	prefixPinExpire = "e"
 )
 
 var (
@@ -17,23 +21,11 @@ func makePinRecordKey(cid string) []byte {
 	return []byte(fmt.Sprintf("%s/%s", prefixPinRecord, cid))
 }
 
-func makeStatusPrefix(status Status) []byte {
-	return []byte(fmt.Sprintf("%s/%02d/", prefixPinStatus, status))
-}
-
-func makeStatusKey(status Status, ts int64, cid string) []byte {
-	var buf bytes.Buffer
-	buf.Write(makeStatusPrefix(status))
-	binary.Write(&buf, binary.BigEndian, ts)
-	buf.WriteString("/" + cid)
-	return buf.Bytes()
-}
-
-func makeExpireEndKey(ts int64) []byte {
+func makeExpireEndKey(timestamp int64) []byte {
 	buffer := make([]byte, 0, ExpireStartKeyLen+8)
 	key := bytes.NewBuffer(buffer[:])
 	key.Write(ExpireStartKey)
-	key.WriteString(fmt.Sprintf("%d", ts))
+	key.WriteString(fmt.Sprintf("%d", timestamp))
 	return key.Bytes()
 }
 

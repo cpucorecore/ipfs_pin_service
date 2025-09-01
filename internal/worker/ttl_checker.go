@@ -39,7 +39,7 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 func (c *TTLChecker) checkTTL(ctx context.Context) error {
 	log.Log.Sugar().Infof("checkTTL start")
 	now := time.Now().UnixMilli()
-	cids, err := c.store.IndexByExpireBefore(ctx, now, c.cfg.TTLChecker.BatchSize)
+	cids, err := c.store.GetExpireCids(ctx, now, c.cfg.TTLChecker.BatchSize)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			continue
 		}
 
-		if err = c.store.RemoveExpireIndex(ctx, cid, pinRecord.ExpireAt); err != nil {
+		if err = c.store.DeleteExpireIndex(ctx, cid, pinRecord.ExpireAt); err != nil {
 			log.Log.Sugar().Errorf("remove expire index for cid[%s] failed: %v", cid, err)
 		}
 	}

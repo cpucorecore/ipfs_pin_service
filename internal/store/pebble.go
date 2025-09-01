@@ -1,21 +1,13 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/cpucorecore/ipfs_pin_service/log"
 	pb "github.com/cpucorecore/ipfs_pin_service/proto"
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	prefixPinRecord = "p"
-	prefixPinStatus = "s"
-	prefixPinExpire = "e"
 )
 
 type PebbleStore struct {
@@ -32,7 +24,7 @@ func NewPebbleStore(path string) (*PebbleStore, error) {
 
 func (s *PebbleStore) Get(ctx context.Context, cid string) (*PinRecord, error) {
 	key := makePinRecordKey(cid)
-	bytes, closer, err := s.db.Get(key)
+	data, closer, err := s.db.Get(key)
 	if errors.Is(err, pebble.ErrNotFound) {
 		return nil, nil
 	}
@@ -44,7 +36,7 @@ func (s *PebbleStore) Get(ctx context.Context, cid string) (*PinRecord, error) {
 	defer closer.Close()
 
 	pinRecord := &pb.PinRecord{}
-	if err = proto.Unmarshal(bytes, pinRecord); err != nil {
+	if err = proto.Unmarshal(data, pinRecord); err != nil {
 		return nil, err
 	}
 
@@ -52,27 +44,13 @@ func (s *PebbleStore) Get(ctx context.Context, cid string) (*PinRecord, error) {
 }
 
 func (s *PebbleStore) Put(ctx context.Context, pinRecord *PinRecord) error {
-	batch := s.db.NewBatch()
-	defer batch.Close()
-
 	pinRecord.LastUpdateAt = time.Now().UnixMilli()
-
-	bytes, err := proto.Marshal(pinRecord)
+	data, err := proto.Marshal(pinRecord)
 	if err != nil {
 		return err
 	}
 
-	if err = batch.Set(makePinRecordKey(pinRecord.Cid), bytes, nil); err != nil {
-		return err
-	}
-
-	if err = batch.Set(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, pinRecord.Cid), nil, nil); err != nil {
-		return err
-	}
-
-	// 注意：不再自动处理过期索引，需要单独调用AddExpireIndex/RemoveExpireIndex
-
-	return batch.Commit(pebble.Sync)
+	return s.db.Set(makePinRecordKey(pinRecord.Cid), data, pebble.Sync)
 }
 
 var (
@@ -89,55 +67,27 @@ func (s *PebbleStore) Update(ctx context.Context, cid string, apply func(*PinRec
 		return ErrRecordNotFound
 	}
 
-	batch := s.db.NewBatch()
-	defer batch.Close()
-
-	if err = batch.Delete(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, cid), nil); err != nil {
-		return err
-	}
-
 	if err = apply(pinRecord); err != nil {
 		return err
 	}
 
-	pinRecord.LastUpdateAt = time.Now().UnixMilli()
-	bytes, err := proto.Marshal(pinRecord)
-	if err != nil {
-		return err
-	}
-
-	if err = batch.Set(makePinRecordKey(cid), bytes, nil); err != nil {
-		return err
-	}
-
-	if err = batch.Set(makeStatusKey(pinRecord.Status, pinRecord.LastUpdateAt, cid), nil, nil); err != nil {
-		return err
-	}
-
-	err = batch.Commit(pebble.Sync)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.Put(ctx, pinRecord)
 }
 
-func (s *PebbleStore) IndexByStatus(ctx context.Context, status Status) (Iterator[string], error) {
-	prefix := makeStatusPrefix(status)
-	upper := makeStatusPrefix(status + 1)
-	iter, _ := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: prefix,
-		UpperBound: upper,
-	})
-	return &pebbleIterator{iter: iter}, nil
+func (s *PebbleStore) AddExpireIndex(ctx context.Context, cid string, expireAt int64) error {
+	expireKey := makeExpireKey(expireAt, cid)
+	return s.db.Set(expireKey, nil, pebble.Sync)
 }
 
-func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit int) ([]string, error) {
-	expireEndKey := makeExpireEndKey(ts)
+func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string, expireAt int64) error {
+	expireKey := makeExpireKey(expireAt, cid)
+	return s.db.Delete(expireKey, pebble.Sync)
+}
 
+func (s *PebbleStore) GetExpireCids(ctx context.Context, timestamp int64, limit int) ([]string, error) {
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: ExpireStartKey,
-		UpperBound: expireEndKey,
+		UpperBound: makeExpireEndKey(timestamp),
 	})
 	defer iter.Close()
 
@@ -148,70 +98,11 @@ func (s *PebbleStore) IndexByExpireBefore(ctx context.Context, ts int64, limit i
 		if err != nil {
 			return nil, err
 		}
-
 		cids = append(cids, cid)
 	}
-
 	return cids, iter.Error()
-}
-
-func (s *PebbleStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
-	rec, err := s.Get(ctx, cid)
-	if err != nil {
-		return "", err
-	}
-	if rec == nil || rec.ExpireAt == 0 {
-		return "", nil
-	}
-	expireKey := makeExpireKey(rec.ExpireAt, cid)
-	log.Log.Sugar().Debugf("get expire index key: %s", expireKey)
-	_, _, err = s.db.Get(expireKey)
-	return string(expireKey), err
-}
-
-func (s *PebbleStore) AddExpireIndex(ctx context.Context, cid string, expireAt int64) error {
-	if expireAt <= 0 {
-		return nil
-	}
-	expireKey := makeExpireKey(expireAt, cid)
-	return s.db.Set(expireKey, nil, pebble.Sync)
-}
-
-func (s *PebbleStore) RemoveExpireIndex(ctx context.Context, cid string, expireAt int64) error {
-	if expireAt <= 0 {
-		return nil
-	}
-	expireKey := makeExpireKey(expireAt, cid)
-	return s.db.Delete(expireKey, pebble.Sync)
 }
 
 func (s *PebbleStore) Close() error {
 	return s.db.Close()
-}
-
-type pebbleIterator struct {
-	iter    *pebble.Iterator
-	started bool
-}
-
-func (i *pebbleIterator) Next() bool {
-	if !i.started {
-		i.started = true
-		return i.iter.First()
-	}
-	return i.iter.Next()
-}
-
-func (i *pebbleIterator) Value() string {
-	key := i.iter.Key()
-	parts := bytes.Split(key, []byte("/"))
-	return string(parts[len(parts)-1])
-}
-
-func (i *pebbleIterator) Error() error {
-	return i.iter.Error()
-}
-
-func (i *pebbleIterator) Close() error {
-	return i.iter.Close()
 }
