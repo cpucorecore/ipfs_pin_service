@@ -66,7 +66,7 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 			continue
 		}
 
-		if pinRecord.Status != store.StatusActive || pinRecord.Status != store.StatusDeadLetter {
+		if pinRecord.Status != store.StatusActive && pinRecord.Status != store.StatusDeadLetter {
 			log.Log.Sugar().Warnf("unpin[%s] with wrong status[%d]", cid, pinRecord.Status)
 			continue
 		}
