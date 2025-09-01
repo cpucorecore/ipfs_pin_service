@@ -22,12 +22,6 @@ func TestMain(m *testing.M) {
 
 type fakeStore struct{ m map[string]*store.PinRecord }
 
-func (f *fakeStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
-	return "", nil
-}
-
-type noop struct{}
-
 func (f *fakeStore) Get(ctx context.Context, cid string) (*store.PinRecord, error) {
 	if f.m == nil {
 		f.m = map[string]*store.PinRecord{}
@@ -44,8 +38,20 @@ func (f *fakeStore) Put(ctx context.Context, rec *store.PinRecord) error {
 func (f *fakeStore) Update(ctx context.Context, cid string, apply func(*store.PinRecord) error) error {
 	return nil
 }
-func (f *fakeStore) Upsert(ctx context.Context, cid string, init func(*store.PinRecord), apply func(*store.PinRecord) error) (*store.PinRecord, bool, error) {
-	return nil, false, nil
+func (f *fakeStore) AddExpireIndex(ctx context.Context, cid string, expireAt int64) error {
+	return nil
+}
+func (f *fakeStore) DeleteExpireIndex(ctx context.Context, cid string, expireAt int64) error {
+	return nil
+}
+func (f *fakeStore) GetExpireCids(ctx context.Context, ts int64, limit int) ([]string, error) {
+	return nil, nil
+}
+func (f *fakeStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
+	return "", nil
+}
+func (f *fakeStore) Close() error {
+	return nil
 }
 
 type fakeMQ struct{ payloads [][]byte }

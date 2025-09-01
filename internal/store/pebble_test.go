@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 	"time"
 
@@ -95,36 +94,64 @@ func TestPebbleStoreUpdateMissing(t *testing.T) {
 	}
 }
 
-func TestIndexByStatus(t *testing.T) {
+func TestAddExpireIndex(t *testing.T) {
 	s := newTempPebble(t)
 	ctx := context.Background()
-	// Insert records to verify ordering within the index
-	for i := range []int{0, 1, 2} {
-		rec := &PinRecord{
-			Cid:    fmt.Sprintf("cid-%c", 'A'+i),
-			Status: StatusActive,
-		}
-		if err := s.Put(ctx, rec); err != nil {
-			t.Fatalf("Put error: %v", err)
-		}
-	}
 
-	it, err := s.IndexByStatus(ctx, StatusActive)
+	cid := "test-cid"
+	expireAt := int64(123456789)
+
+	// Test adding expire index
+	err := s.AddExpireIndex(ctx, cid, expireAt)
 	if err != nil {
-		t.Fatalf("IndexByStatus error: %v", err)
+		t.Fatalf("AddExpireIndex error: %v", err)
 	}
-	defer it.Close()
 
-	var values []string
-	for it.Next() {
-		values = append(values, it.Value())
+	// Verify the index was added by querying it
+	cids, err := s.GetExpireCids(ctx, expireAt+1000, 10)
+	if err != nil {
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if err := it.Error(); err != nil {
-		t.Fatalf("iterator error: %v", err)
+	if len(cids) != 1 || cids[0] != cid {
+		t.Fatalf("expected to find cid %s, got %v", cid, cids)
 	}
-	// The order is lexicographic by the key; since we used increasing ts and distinct cids, we at least expect 3 values back
-	if len(values) != 3 {
-		t.Fatalf("expected 3 values, got %d: %v", len(values), values)
+}
+
+func TestDeleteExpireIndex(t *testing.T) {
+	s := newTempPebble(t)
+	ctx := context.Background()
+
+	cid := "test-cid"
+	expireAt := int64(123456789)
+
+	// First add the expire index
+	err := s.AddExpireIndex(ctx, cid, expireAt)
+	if err != nil {
+		t.Fatalf("AddExpireIndex error: %v", err)
+	}
+
+	// Verify it was added
+	cids, err := s.GetExpireCids(ctx, expireAt+1000, 10)
+	if err != nil {
+		t.Fatalf("GetExpireCids error after add: %v", err)
+	}
+	if len(cids) != 1 || cids[0] != cid {
+		t.Fatalf("expected to find cid %s after add, got %v", cid, cids)
+	}
+
+	// Now delete the expire index
+	err = s.DeleteExpireIndex(ctx, cid, expireAt)
+	if err != nil {
+		t.Fatalf("DeleteExpireIndex error: %v", err)
+	}
+
+	// Verify it was deleted
+	cids, err = s.GetExpireCids(ctx, expireAt+1000, 10)
+	if err != nil {
+		t.Fatalf("GetExpireCids error after delete: %v", err)
+	}
+	if len(cids) != 0 {
+		t.Fatalf("expected no cids after delete, got %v", cids)
 	}
 }
 
@@ -193,54 +220,45 @@ func TestPebbleStoreClose(t *testing.T) {
 	}
 }
 
-func TestIndexByStatusOrderingTieBreakOnCid(t *testing.T) {
+func TestGetExpireCidsEmpty(t *testing.T) {
 	s := newTempPebble(t)
 	ctx := context.Background()
 
-	// Insert 4 with StatusActive, and 1 with other status which should be excluded
-	items := []PinRecord{
-		{Cid: "cid-m", Status: StatusActive}, // ts=100
-		{Cid: "cid-a", Status: StatusActive}, // same ts, cid tie-breaker
-		{Cid: "cid-z", Status: StatusActive}, // smallest ts
-		{Cid: "cid-b", Status: StatusActive}, // largest ts
-		{Cid: "skip-other-status", Status: StatusReceived},
-	}
-	for i := range items {
-		rec := items[i] // copy to avoid loop var capture
-		if err := s.Put(ctx, &rec); err != nil {
-			t.Fatalf("Put error: %v", err)
-		}
-	}
-
-	it, err := s.IndexByStatus(ctx, StatusActive)
+	// Test querying empty store
+	cids, err := s.GetExpireCids(ctx, 1000, 10)
 	if err != nil {
-		t.Fatalf("IndexByStatus error: %v", err)
+		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	defer it.Close()
-
-	var order []string
-	for it.Next() {
-		order = append(order, it.Value())
-	}
-	if err := it.Error(); err != nil {
-		t.Fatalf("iterator error: %v", err)
-	}
-
-	// Expected order: by cid asc since all have same LastUpdateAt
-	// Sort the actual results to match expected order
-	sort.Strings(order)
-	expected := []string{"cid-a", "cid-b", "cid-m", "cid-z"}
-	if len(order) != len(expected) {
-		t.Fatalf("unexpected count: got %d want %d (%v)", len(order), len(expected), order)
-	}
-	for i := range expected {
-		if order[i] != expected[i] {
-			t.Fatalf("index order mismatch at %d: got %v want %v", i, order, expected)
-		}
+	if len(cids) != 0 {
+		t.Fatalf("expected empty result, got %v", cids)
 	}
 }
 
-func TestIndexByExpireBeforeOrderingAndLimit(t *testing.T) {
+func TestGetExpireCidsLimit(t *testing.T) {
+	s := newTempPebble(t)
+	ctx := context.Background()
+
+	// Add multiple expire indexes
+	for i := 0; i < 5; i++ {
+		cid := fmt.Sprintf("test-cid-%d", i)
+		expireAt := int64(1000 + i)
+		err := s.AddExpireIndex(ctx, cid, expireAt)
+		if err != nil {
+			t.Fatalf("AddExpireIndex error for %s: %v", cid, err)
+		}
+	}
+
+	// Test limit
+	cids, err := s.GetExpireCids(ctx, 2000, 3)
+	if err != nil {
+		t.Fatalf("GetExpireCids error: %v", err)
+	}
+	if len(cids) != 3 {
+		t.Fatalf("expected 3 results with limit, got %d: %v", len(cids), cids)
+	}
+}
+
+func TestGetExpireCidsOrderingAndLimit(t *testing.T) {
 	s := newTempPebble(t)
 	ctx := context.Background()
 
