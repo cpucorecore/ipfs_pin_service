@@ -39,4 +39,7 @@ func (w *QueueMonitor) sample(ctx context.Context) {
 	if stats, err := w.mq.Stats(ctx, w.cfg.RabbitMQ.Unpin.Queue); err == nil {
 		monitor.SetQueueStats(w.cfg.RabbitMQ.Unpin.Queue, stats.Messages, stats.Consumers)
 	}
+	if stats, err := w.mq.Stats(ctx, w.cfg.RabbitMQ.Provide.Queue); err == nil {
+		monitor.SetQueueStats(w.cfg.RabbitMQ.Provide.Queue, stats.Messages, stats.Consumers)
+	}
 }
