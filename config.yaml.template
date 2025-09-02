@@ -43,6 +43,7 @@ workers:
   pin_concurrency: 8
   unpin_concurrency: 4
   provide_concurrency: 2
+  provide_recursive: false  # 是否递归provide目录内容
   max_retries: 30
   pin_timeout: "30m"      # 单次pin操作超时（覆盖http_timeout更大场景）
   unpin_timeout: "5m"     # 单次unpin操作超时

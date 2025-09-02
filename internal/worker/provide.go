@@ -88,13 +88,23 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	}
 
 	provideStartTime := time.Now()
-	err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
+	// 根据配置决定是否使用递归provide
+	var opType string
+	if w.cfg.Workers.ProvideRecursive {
+		err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
+		opType = monitor.OpProvideRecursive
+		log.Log.Sugar().Infof("Provide[%s] using recursive mode", cid)
+	} else {
+		err = w.ipfs.Provide(timeoutCtx, cid)
+		opType = monitor.OpProvide
+		log.Log.Sugar().Infof("Provide[%s] using non-recursive mode", cid)
+	}
 	provideEndTime := time.Now()
 	if err != nil {
 		return w.handleProvideError(ctx, cid, err)
 	}
 	duration := provideEndTime.Sub(provideStartTime)
-	monitor.ObserveOperation(monitor.OpProvide, duration, err)
+	monitor.ObserveOperation(opType, duration, err)
 
 	log.Log.Sugar().Infof("Provide[%s] ipfs done: %s", cid, duration)
 

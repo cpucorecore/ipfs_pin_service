@@ -45,6 +45,7 @@ type Config struct {
 		PinConcurrency     int           `yaml:"pin_concurrency"`
 		UnpinConcurrency   int           `yaml:"unpin_concurrency"`
 		ProvideConcurrency int           `yaml:"provide_concurrency"`
+		ProvideRecursive   bool          `yaml:"provide_recursive"`
 		MaxRetries         int           `yaml:"max_retries"`
 		PinTimeout         time.Duration `yaml:"pin_timeout"`
 		UnpinTimeout       time.Duration `yaml:"unpin_timeout"`
