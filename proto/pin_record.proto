@@ -19,5 +19,9 @@ message PinRecord {
     int32 pin_attempt_count = 13;
     int32 unpin_attempt_count = 14;
     int64 size_limit = 15;
-    repeated PinRecord history = 16;  // 历史状态记录
+    int64 provide_start_at = 16;
+    int64 provide_succeeded_at = 17;
+    int32 provide_attempt_count = 18;
+    string provide_error = 19;
+    repeated PinRecord history = 20;
 }

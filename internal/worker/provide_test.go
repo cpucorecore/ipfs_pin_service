@@ -1,0 +1,43 @@
+package worker
+
+import (
+	"os"
+	"testing"
+
+	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
+	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestProvideWorker(t *testing.T) {
+	// 创建测试用的配置
+	cfg := &config.Config{}
+
+	// 创建测试用的 store
+	testStore, err := store.NewPebbleStore("test_provide.db")
+	require.NoError(t, err)
+	defer testStore.Close()
+	defer os.RemoveAll("test_provide.db")
+
+	// 创建测试用的 IPFS 客户端 (mock)
+	ipfsClient := &ipfs.Client{}
+
+	// 创建 provide worker
+	worker := NewProvideWorker(testStore, nil, ipfsClient, cfg)
+
+	// 测试 worker 创建
+	assert.NotNil(t, worker)
+	assert.Equal(t, testStore, worker.store)
+	assert.Equal(t, ipfsClient, worker.ipfs)
+	assert.Equal(t, cfg, worker.cfg)
+}
+
+func TestProvideRequestMsg(t *testing.T) {
+	msg := ProvideRequestMsg{
+		Cid: "QmTest123",
+	}
+
+	assert.Equal(t, "QmTest123", msg.Cid)
+}

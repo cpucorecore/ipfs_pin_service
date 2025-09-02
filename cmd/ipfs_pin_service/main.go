@@ -75,6 +75,7 @@ func main() {
 	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
 	pinWorker := worker.NewPinWorker(pebbleStore, mq, ipfsClient, policy, cfg)
 	unpinWorker := worker.NewUnpinWorker(pebbleStore, mq, ipfsClient, cfg)
+	provideWorker := worker.NewProvideWorker(pebbleStore, mq, ipfsClient, cfg)
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
 	statWorker := worker.NewStatWorker(ipfsClient, cfg)
 	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
@@ -99,6 +100,14 @@ func main() {
 		defer wg.Done()
 		if err = unpinWorker.Start(ctx); err != nil {
 			log.Log.Sugar().Errorf("Unpin worker stopped: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err = provideWorker.Start(ctx); err != nil {
+			log.Log.Sugar().Errorf("Provide worker stopped: %v", err)
 		}
 	}()
 

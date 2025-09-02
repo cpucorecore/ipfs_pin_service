@@ -31,12 +31,123 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 	queueConfig := make(map[string]config.QueueConf)
 	queueConfig[cfg.RabbitMQ.Pin.Exchange] = cfg.RabbitMQ.Pin
 	queueConfig[cfg.RabbitMQ.Unpin.Exchange] = cfg.RabbitMQ.Unpin
+	queueConfig[cfg.RabbitMQ.Provide.Exchange] = cfg.RabbitMQ.Provide
 
-	return &RabbitMQ{
+	rabbitmq := &RabbitMQ{
 		connectionManager: connectionManager,
 		channel:           channel,
 		queueConfig:       queueConfig,
-	}, nil
+	}
+
+	// 初始化所有队列
+	if err := rabbitmq.setupAllQueues(channel, cfg); err != nil {
+		channel.Close()
+		return nil, fmt.Errorf("setup queues: %w", err)
+	}
+
+	return rabbitmq, nil
+}
+
+func (mq *RabbitMQ) setupAllQueues(channel *amqp.Channel, cfg *config.Config) error {
+	// 设置 Pin 队列
+	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Pin); err != nil {
+		return fmt.Errorf("setup pin queues: %w", err)
+	}
+
+	// 设置 Unpin 队列
+	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Unpin); err != nil {
+		return fmt.Errorf("setup unpin queues: %w", err)
+	}
+
+	// 设置 Provide 队列
+	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Provide); err != nil {
+		return fmt.Errorf("setup provide queues: %w", err)
+	}
+
+	return nil
+}
+
+func (mq *RabbitMQ) setupExchangeAndQueue(channel *amqp.Channel, queueConf *config.QueueConf) error {
+	// 声明主交换机
+	if err := channel.ExchangeDeclare(
+		queueConf.Exchange,
+		"direct",
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,   // arguments
+	); err != nil {
+		return fmt.Errorf("declare exchange %s: %w", queueConf.Exchange, err)
+	}
+
+	// 声明死信交换机
+	if err := channel.ExchangeDeclare(
+		queueConf.DLX,
+		"direct",
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,   // arguments
+	); err != nil {
+		return fmt.Errorf("declare DLX %s: %w", queueConf.DLX, err)
+	}
+
+	// 声明主队列
+	if _, err := channel.QueueDeclare(
+		queueConf.Queue,
+		true,  // durable
+		false, // auto-deleted
+		false, // exclusive
+		false, // no-wait
+		amqp.Table{
+			"x-dead-letter-exchange":    queueConf.DLX,
+			"x-dead-letter-routing-key": queueConf.RetryQueue,
+		},
+	); err != nil {
+		return fmt.Errorf("declare queue %s: %w", queueConf.Queue, err)
+	}
+
+	// 声明重试队列
+	if _, err := channel.QueueDeclare(
+		queueConf.RetryQueue,
+		true,  // durable
+		false, // auto-deleted
+		false, // exclusive
+		false, // no-wait
+		amqp.Table{
+			"x-dead-letter-exchange":    queueConf.Exchange,
+			"x-dead-letter-routing-key": queueConf.Queue,
+			"x-message-ttl":             queueConf.RetryDelay.Milliseconds(),
+		},
+	); err != nil {
+		return fmt.Errorf("declare retry queue %s: %w", queueConf.RetryQueue, err)
+	}
+
+	// 绑定主队列
+	if err := channel.QueueBind(
+		queueConf.Queue,
+		queueConf.Queue,
+		queueConf.Exchange,
+		false,
+		nil,
+	); err != nil {
+		return fmt.Errorf("bind queue %s: %w", queueConf.Queue, err)
+	}
+
+	// 绑定重试队列
+	if err := channel.QueueBind(
+		queueConf.RetryQueue,
+		queueConf.RetryQueue,
+		queueConf.DLX,
+		false,
+		nil,
+	); err != nil {
+		return fmt.Errorf("bind retry queue %s: %w", queueConf.RetryQueue, err)
+	}
+
+	return nil
 }
 
 func (mq *RabbitMQ) getChannel() *amqp.Channel {

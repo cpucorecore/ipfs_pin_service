@@ -32,13 +32,21 @@ rabbitmq:
     dlx: "unpin.dlx"
     retry_queue: "unpin.retry.queue"
     retry_delay: "1s"
+  provide:
+    exchange: "provide.exchange"
+    queue: "provide.queue"
+    dlx: "provide.dlx"
+    retry_queue: "provide.retry.queue"
+    retry_delay: "5s"
 
 workers:
   pin_concurrency: 8
   unpin_concurrency: 4
+  provide_concurrency: 2
   max_retries: 30
   pin_timeout: "30m"      # 单次pin操作超时（覆盖http_timeout更大场景）
   unpin_timeout: "5m"     # 单次unpin操作超时
+  provide_timeout: "10m"  # 单次provide操作超时
 
 gc:
   interval: "1h"

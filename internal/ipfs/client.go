@@ -10,6 +10,7 @@ import (
 	ipfspath "github.com/ipfs/boxo/path"
 	ipfscid "github.com/ipfs/go-cid"
 	"github.com/ipfs/kubo/client/rpc"
+	"github.com/ipfs/kubo/core/coreiface/options"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/log"
@@ -136,4 +137,14 @@ func (c *Client) BitswapStat(ctx context.Context) (*BitswapStat, error) {
 		return nil, err
 	}
 	return bitswapStat, nil
+}
+
+func (c *Client) Provide(ctx context.Context, cidStr string) error {
+	p := getCidPath(cidStr)
+	return c.ipfsCli.Routing().Provide(ctx, p)
+}
+
+func (c *Client) ProvideRecursive(ctx context.Context, cidStr string) error {
+	p := getCidPath(cidStr)
+	return c.ipfsCli.Routing().Provide(ctx, p, options.Routing.Recursive(true))
 }

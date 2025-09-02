@@ -22,25 +22,29 @@ const (
 )
 
 type PinRecord struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Cid               string                 `protobuf:"bytes,1,opt,name=cid,proto3" json:"cid,omitempty"`
-	Status            int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
-	ReceivedAt        int64                  `protobuf:"varint,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
-	EnqueuedAt        int64                  `protobuf:"varint,4,opt,name=enqueued_at,json=enqueuedAt,proto3" json:"enqueued_at,omitempty"`
-	PinStartAt        int64                  `protobuf:"varint,5,opt,name=pin_start_at,json=pinStartAt,proto3" json:"pin_start_at,omitempty"`
-	PinSucceededAt    int64                  `protobuf:"varint,6,opt,name=pin_succeeded_at,json=pinSucceededAt,proto3" json:"pin_succeeded_at,omitempty"`
-	ExpireAt          int64                  `protobuf:"varint,7,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"`
-	ScheduleUnpinAt   int64                  `protobuf:"varint,8,opt,name=schedule_unpin_at,json=scheduleUnpinAt,proto3" json:"schedule_unpin_at,omitempty"`
-	UnpinStartAt      int64                  `protobuf:"varint,9,opt,name=unpin_start_at,json=unpinStartAt,proto3" json:"unpin_start_at,omitempty"`
-	UnpinSucceededAt  int64                  `protobuf:"varint,10,opt,name=unpin_succeeded_at,json=unpinSucceededAt,proto3" json:"unpin_succeeded_at,omitempty"`
-	LastUpdateAt      int64                  `protobuf:"varint,11,opt,name=last_update_at,json=lastUpdateAt,proto3" json:"last_update_at,omitempty"`
-	Size              int64                  `protobuf:"varint,12,opt,name=size,proto3" json:"size,omitempty"`
-	PinAttemptCount   int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
-	UnpinAttemptCount int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
-	SizeLimit         int64                  `protobuf:"varint,15,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
-	History           []*PinRecord           `protobuf:"bytes,16,rep,name=history,proto3" json:"history,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Cid                 string                 `protobuf:"bytes,1,opt,name=cid,proto3" json:"cid,omitempty"`
+	Status              int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
+	ReceivedAt          int64                  `protobuf:"varint,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	EnqueuedAt          int64                  `protobuf:"varint,4,opt,name=enqueued_at,json=enqueuedAt,proto3" json:"enqueued_at,omitempty"`
+	PinStartAt          int64                  `protobuf:"varint,5,opt,name=pin_start_at,json=pinStartAt,proto3" json:"pin_start_at,omitempty"`
+	PinSucceededAt      int64                  `protobuf:"varint,6,opt,name=pin_succeeded_at,json=pinSucceededAt,proto3" json:"pin_succeeded_at,omitempty"`
+	ExpireAt            int64                  `protobuf:"varint,7,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"`
+	ScheduleUnpinAt     int64                  `protobuf:"varint,8,opt,name=schedule_unpin_at,json=scheduleUnpinAt,proto3" json:"schedule_unpin_at,omitempty"`
+	UnpinStartAt        int64                  `protobuf:"varint,9,opt,name=unpin_start_at,json=unpinStartAt,proto3" json:"unpin_start_at,omitempty"`
+	UnpinSucceededAt    int64                  `protobuf:"varint,10,opt,name=unpin_succeeded_at,json=unpinSucceededAt,proto3" json:"unpin_succeeded_at,omitempty"`
+	LastUpdateAt        int64                  `protobuf:"varint,11,opt,name=last_update_at,json=lastUpdateAt,proto3" json:"last_update_at,omitempty"`
+	Size                int64                  `protobuf:"varint,12,opt,name=size,proto3" json:"size,omitempty"`
+	PinAttemptCount     int32                  `protobuf:"varint,13,opt,name=pin_attempt_count,json=pinAttemptCount,proto3" json:"pin_attempt_count,omitempty"`
+	UnpinAttemptCount   int32                  `protobuf:"varint,14,opt,name=unpin_attempt_count,json=unpinAttemptCount,proto3" json:"unpin_attempt_count,omitempty"`
+	SizeLimit           int64                  `protobuf:"varint,15,opt,name=size_limit,json=sizeLimit,proto3" json:"size_limit,omitempty"`
+	ProvideStartAt      int64                  `protobuf:"varint,16,opt,name=provide_start_at,json=provideStartAt,proto3" json:"provide_start_at,omitempty"`
+	ProvideSucceededAt  int64                  `protobuf:"varint,17,opt,name=provide_succeeded_at,json=provideSucceededAt,proto3" json:"provide_succeeded_at,omitempty"`
+	ProvideAttemptCount int32                  `protobuf:"varint,18,opt,name=provide_attempt_count,json=provideAttemptCount,proto3" json:"provide_attempt_count,omitempty"`
+	ProvideError        string                 `protobuf:"bytes,19,opt,name=provide_error,json=provideError,proto3" json:"provide_error,omitempty"`
+	History             []*PinRecord           `protobuf:"bytes,20,rep,name=history,proto3" json:"history,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PinRecord) Reset() {
@@ -178,6 +182,34 @@ func (x *PinRecord) GetSizeLimit() int64 {
 	return 0
 }
 
+func (x *PinRecord) GetProvideStartAt() int64 {
+	if x != nil {
+		return x.ProvideStartAt
+	}
+	return 0
+}
+
+func (x *PinRecord) GetProvideSucceededAt() int64 {
+	if x != nil {
+		return x.ProvideSucceededAt
+	}
+	return 0
+}
+
+func (x *PinRecord) GetProvideAttemptCount() int32 {
+	if x != nil {
+		return x.ProvideAttemptCount
+	}
+	return 0
+}
+
+func (x *PinRecord) GetProvideError() string {
+	if x != nil {
+		return x.ProvideError
+	}
+	return ""
+}
+
 func (x *PinRecord) GetHistory() []*PinRecord {
 	if x != nil {
 		return x.History
@@ -189,7 +221,7 @@ var File_proto_pin_record_proto protoreflect.FileDescriptor
 
 const file_proto_pin_record_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/pin_record.proto\x12\x03ipm\"\xbf\x04\n" +
+	"\x16proto/pin_record.proto\x12\x03ipm\"\xf4\x05\n" +
 	"\tPinRecord\x12\x10\n" +
 	"\x03cid\x18\x01 \x01(\tR\x03cid\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x1f\n" +
@@ -211,7 +243,11 @@ const file_proto_pin_record_proto_rawDesc = "" +
 	"\x13unpin_attempt_count\x18\x0e \x01(\x05R\x11unpinAttemptCount\x12\x1d\n" +
 	"\n" +
 	"size_limit\x18\x0f \x01(\x03R\tsizeLimit\x12(\n" +
-	"\ahistory\x18\x10 \x03(\v2\x0e.ipm.PinRecordR\ahistoryB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
+	"\x10provide_start_at\x18\x10 \x01(\x03R\x0eprovideStartAt\x120\n" +
+	"\x14provide_succeeded_at\x18\x11 \x01(\x03R\x12provideSucceededAt\x122\n" +
+	"\x15provide_attempt_count\x18\x12 \x01(\x05R\x13provideAttemptCount\x12#\n" +
+	"\rprovide_error\x18\x13 \x01(\tR\fprovideError\x12(\n" +
+	"\ahistory\x18\x14 \x03(\v2\x0e.ipm.PinRecordR\ahistoryB/Z-github.com/cpucorecore/ipfs_pin_service/protob\x06proto3"
 
 var (
 	file_proto_pin_record_proto_rawDescOnce sync.Once

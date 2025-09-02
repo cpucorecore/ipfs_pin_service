@@ -8,24 +8,28 @@ import (
 )
 
 type PinRecordView struct {
-	CID               string           `json:"cid"`
-	Status            string           `json:"status"`
-	ReceivedAt        string           `json:"received_at"`
-	EnqueuedAt        string           `json:"enqueued_at,omitempty"`
-	PinStartAt        string           `json:"pin_start_at,omitempty"`
-	PinSucceededAt    string           `json:"pin_succeeded_at,omitempty"`
-	ExpireAt          string           `json:"expire_at,omitempty"`
-	ScheduleUnpinAt   string           `json:"schedule_unpin_at,omitempty"`
-	UnpinStartAt      string           `json:"unpin_start_at,omitempty"`
-	UnpinSucceededAt  string           `json:"unpin_succeeded_at,omitempty"`
-	LastUpdateAt      string           `json:"last_update_at"`
-	Size              int64            `json:"size"`
-	SizeHuman         string           `json:"size_human"`
-	PinAttemptCount   int32            `json:"pin_attempt_count"`
-	UnpinAttemptCount int32            `json:"unpin_attempt_count"`
-	TTL               string           `json:"ttl,omitempty"`
-	Age               string           `json:"age"`
-	History           []*PinRecordView `json:"history,omitempty"` // 历史记录
+	CID                 string           `json:"cid"`
+	Status              string           `json:"status"`
+	ReceivedAt          string           `json:"received_at"`
+	EnqueuedAt          string           `json:"enqueued_at,omitempty"`
+	PinStartAt          string           `json:"pin_start_at,omitempty"`
+	PinSucceededAt      string           `json:"pin_succeeded_at,omitempty"`
+	ExpireAt            string           `json:"expire_at,omitempty"`
+	ScheduleUnpinAt     string           `json:"schedule_unpin_at,omitempty"`
+	UnpinStartAt        string           `json:"unpin_start_at,omitempty"`
+	UnpinSucceededAt    string           `json:"unpin_succeeded_at,omitempty"`
+	ProvideStartAt      string           `json:"provide_start_at,omitempty"`
+	ProvideSucceededAt  string           `json:"provide_succeeded_at,omitempty"`
+	LastUpdateAt        string           `json:"last_update_at"`
+	Size                int64            `json:"size"`
+	SizeHuman           string           `json:"size_human"`
+	PinAttemptCount     int32            `json:"pin_attempt_count"`
+	UnpinAttemptCount   int32            `json:"unpin_attempt_count"`
+	ProvideAttemptCount int32            `json:"provide_attempt_count"`
+	ProvideError        string           `json:"provide_error,omitempty"`
+	TTL                 string           `json:"ttl,omitempty"`
+	Age                 string           `json:"age"`
+	History             []*PinRecordView `json:"history,omitempty"` // 历史记录
 }
 
 func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView {
@@ -33,14 +37,26 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 	receivedAt := time.UnixMilli(r.ReceivedAt)
 
 	view := &PinRecordView{
-		CID:               r.Cid,
-		Status:            TranslateStatus(r.Status),
-		ReceivedAt:        FormatTime(receivedAt, timeFormat),
-		LastUpdateAt:      FormatTime(time.UnixMilli(r.LastUpdateAt), timeFormat),
-		Size:              r.Size,
-		SizeHuman:         FormatBytes(r.Size),
-		PinAttemptCount:   r.PinAttemptCount,
-		UnpinAttemptCount: r.UnpinAttemptCount,
+		CID:                 r.Cid,
+		Status:              TranslateStatus(r.Status),
+		ReceivedAt:          FormatTime(receivedAt, timeFormat),
+		LastUpdateAt:        FormatTime(time.UnixMilli(r.LastUpdateAt), timeFormat),
+		Size:                r.Size,
+		SizeHuman:           FormatBytes(r.Size),
+		PinAttemptCount:     r.PinAttemptCount,
+		UnpinAttemptCount:   r.UnpinAttemptCount,
+		ProvideAttemptCount: r.ProvideAttemptCount,
+		ProvideError:        r.ProvideError,
+	}
+
+	// Handle provide timing fields
+	if r.ProvideStartAt > 0 {
+		t := time.UnixMilli(r.ProvideStartAt)
+		view.ProvideStartAt = FormatTime(t, timeFormat)
+	}
+	if r.ProvideSucceededAt > 0 {
+		t := time.UnixMilli(r.ProvideSucceededAt)
+		view.ProvideSucceededAt = FormatTime(t, timeFormat)
 	}
 
 	if r.EnqueuedAt > 0 {
@@ -118,15 +134,27 @@ func convertPinRecordWithoutHistory(r *store.PinRecord, timeFormat TimeFormat) *
 	receivedAt := time.UnixMilli(r.ReceivedAt)
 
 	view := &PinRecordView{
-		CID:               r.Cid,
-		Status:            TranslateStatus(r.Status),
-		ReceivedAt:        FormatTime(receivedAt, timeFormat),
-		LastUpdateAt:      FormatTime(time.UnixMilli(r.LastUpdateAt), timeFormat),
-		Size:              r.Size,
-		SizeHuman:         FormatBytes(r.Size),
-		PinAttemptCount:   r.PinAttemptCount,
-		UnpinAttemptCount: r.UnpinAttemptCount,
+		CID:                 r.Cid,
+		Status:              TranslateStatus(r.Status),
+		ReceivedAt:          FormatTime(receivedAt, timeFormat),
+		LastUpdateAt:        FormatTime(time.UnixMilli(r.LastUpdateAt), timeFormat),
+		Size:                r.Size,
+		SizeHuman:           FormatBytes(r.Size),
+		PinAttemptCount:     r.PinAttemptCount,
+		UnpinAttemptCount:   r.UnpinAttemptCount,
+		ProvideAttemptCount: r.ProvideAttemptCount,
+		ProvideError:        r.ProvideError,
 		// 注意：不包含 History 字段
+	}
+
+	// Handle provide timing fields
+	if r.ProvideStartAt > 0 {
+		t := time.UnixMilli(r.ProvideStartAt)
+		view.ProvideStartAt = FormatTime(t, timeFormat)
+	}
+	if r.ProvideSucceededAt > 0 {
+		t := time.UnixMilli(r.ProvideSucceededAt)
+		view.ProvideSucceededAt = FormatTime(t, timeFormat)
 	}
 
 	if r.EnqueuedAt > 0 {

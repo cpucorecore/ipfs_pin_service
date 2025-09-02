@@ -11,6 +11,7 @@ import (
 const (
 	OpPinAdd      = "pin_add"
 	OpPinRm       = "pin_rm"
+	OpProvide     = "provide"
 	OpRepoStat    = "repo_stat"
 	OpRepoGC      = "repo_gc"
 	OpBitswapStat = "bitswap_stat"

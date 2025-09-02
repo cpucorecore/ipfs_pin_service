@@ -20,6 +20,7 @@ type RabbitMQConf struct {
 	Prefetch int       `yaml:"prefetch"`
 	Pin      QueueConf `yaml:"pin"`
 	Unpin    QueueConf `yaml:"unpin"`
+	Provide  QueueConf `yaml:"provide"`
 }
 
 type Config struct {
@@ -41,11 +42,13 @@ type Config struct {
 	RabbitMQ RabbitMQConf `yaml:"rabbitmq"`
 
 	Workers struct {
-		PinConcurrency   int           `yaml:"pin_concurrency"`
-		UnpinConcurrency int           `yaml:"unpin_concurrency"`
-		MaxRetries       int           `yaml:"max_retries"`
-		PinTimeout       time.Duration `yaml:"pin_timeout"`
-		UnpinTimeout     time.Duration `yaml:"unpin_timeout"`
+		PinConcurrency     int           `yaml:"pin_concurrency"`
+		UnpinConcurrency   int           `yaml:"unpin_concurrency"`
+		ProvideConcurrency int           `yaml:"provide_concurrency"`
+		MaxRetries         int           `yaml:"max_retries"`
+		PinTimeout         time.Duration `yaml:"pin_timeout"`
+		UnpinTimeout       time.Duration `yaml:"unpin_timeout"`
+		ProvideTimeout     time.Duration `yaml:"provide_timeout"`
 	} `yaml:"workers"`
 
 	GC struct {

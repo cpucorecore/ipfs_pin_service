@@ -2,20 +2,23 @@ package queue
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"time"
 )
 
 type Setup struct {
-	Pin   *config.QueueConf
-	Unpin *config.QueueConf
+	Pin     *config.QueueConf
+	Unpin   *config.QueueConf
+	Provide *config.QueueConf
 }
 
-func NewSetup(pin *config.QueueConf, unpin *config.QueueConf) *Setup {
+func NewSetup(pin *config.QueueConf, unpin *config.QueueConf, provide *config.QueueConf) *Setup {
 	return &Setup{
-		Pin:   pin,
-		Unpin: unpin,
+		Pin:     pin,
+		Unpin:   unpin,
+		Provide: provide,
 	}
 }
 
@@ -40,6 +43,17 @@ func (c *Setup) setupQueues(channel *amqp.Channel) error {
 		c.Unpin.RetryDelay,
 	); err != nil {
 		return fmt.Errorf("setup unpin queues: %w", err)
+	}
+
+	if err := c.setupExchangeAndQueue(
+		channel,
+		c.Provide.Exchange,
+		c.Provide.Queue,
+		c.Provide.DLX,
+		c.Provide.RetryQueue,
+		c.Provide.RetryDelay,
+	); err != nil {
+		return fmt.Errorf("setup provide queues: %w", err)
 	}
 
 	return nil
