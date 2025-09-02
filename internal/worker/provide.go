@@ -88,7 +88,7 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	}
 
 	provideStartTime := time.Now()
-	err = w.ipfs.Provide(timeoutCtx, cid)
+	err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
 	provideEndTime := time.Now()
 	if err != nil {
 		return w.handleProvideError(ctx, cid, err)
