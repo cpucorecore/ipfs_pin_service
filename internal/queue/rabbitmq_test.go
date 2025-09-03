@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,8 @@ func TestRabbitMQ_QueueConfig(t *testing.T) {
 	// 在实际测试环境中，可能需要跳过或者使用 mock
 	t.Skip("Skipping RabbitMQ integration test - requires running RabbitMQ instance")
 
-	rabbitmq, err := NewRabbitMQ(cfg)
+	shutdownMgr := shutdown.NewManager()
+	rabbitmq, err := NewRabbitMQ(cfg, shutdownMgr)
 	if err != nil {
 		t.Fatalf("Failed to create RabbitMQ: %v", err)
 	}

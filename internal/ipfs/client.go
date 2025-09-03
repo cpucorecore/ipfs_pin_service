@@ -97,7 +97,6 @@ func (c *Client) RepoStat(ctx context.Context) (*RepoStat, error) {
 	return repoStat, nil
 }
 
-// 定义 Wantlist 项目类型
 type WantlistItem struct {
 	CID string `json:"/"`
 }
@@ -114,7 +113,6 @@ type BitswapStat struct {
 	DataSent         uint64         `json:"DataSent"`
 }
 
-// 获取 Wantlist CID 列表
 func (bs *BitswapStat) GetWantlist() []string {
 	result := make([]string, len(bs.WantlistItems))
 	for i, item := range bs.WantlistItems {

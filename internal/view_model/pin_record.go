@@ -29,7 +29,7 @@ type PinRecordView struct {
 	ProvideError        string           `json:"provide_error,omitempty"`
 	TTL                 string           `json:"ttl,omitempty"`
 	Age                 string           `json:"age"`
-	History             []*PinRecordView `json:"history,omitempty"` // 历史记录
+	History             []*PinRecordView `json:"history,omitempty"`
 }
 
 func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView {
@@ -117,7 +117,6 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 		view.Age = ""
 	}
 
-	// 处理历史记录（不包含历史记录本身，避免递归）
 	if r.History != nil && len(r.History) > 0 {
 		view.History = make([]*PinRecordView, len(r.History))
 		for i, historyRecord := range r.History {
@@ -128,7 +127,6 @@ func ConvertPinRecord(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView 
 	return view
 }
 
-// convertPinRecordWithoutHistory 转换 PinRecord 但不包含历史记录，避免递归
 func convertPinRecordWithoutHistory(r *store.PinRecord, timeFormat TimeFormat) *PinRecordView {
 	now := time.Now()
 	receivedAt := time.UnixMilli(r.ReceivedAt)
@@ -144,7 +142,6 @@ func convertPinRecordWithoutHistory(r *store.PinRecord, timeFormat TimeFormat) *
 		UnpinAttemptCount:   r.UnpinAttemptCount,
 		ProvideAttemptCount: r.ProvideAttemptCount,
 		ProvideError:        r.ProvideError,
-		// 注意：不包含 History 字段
 	}
 
 	// Handle provide timing fields

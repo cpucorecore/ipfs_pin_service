@@ -7,15 +7,18 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type QueueMonitor struct {
-	mq  queue.MessageQueue
-	cfg *config.Config
+	mq          queue.MessageQueue
+	cfg         *config.Config
+	shutdownMgr *shutdown.Manager
 }
 
-func NewQueueMonitor(mq queue.MessageQueue, cfg *config.Config) *QueueMonitor {
-	return &QueueMonitor{mq: mq, cfg: cfg}
+func NewQueueMonitor(mq queue.MessageQueue, cfg *config.Config, shutdownMgr *shutdown.Manager) *QueueMonitor {
+	return &QueueMonitor{mq: mq, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
 func (w *QueueMonitor) Start(ctx context.Context) error {
@@ -27,6 +30,10 @@ func (w *QueueMonitor) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if w.shutdownMgr != nil && w.shutdownMgr.IsDraining() {
+				log.Log.Sugar().Info("Queue monitor stopping due to drain mode")
+				return nil
+			}
 			w.sample(ctx)
 		}
 	}

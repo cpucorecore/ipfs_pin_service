@@ -7,16 +7,18 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type BitswapStatWorker struct {
-	ipfs *ipfs.Client
-	cfg  *config.Config
+	ipfs        *ipfs.Client
+	cfg         *config.Config
+	shutdownMgr *shutdown.Manager
 }
 
-func NewBitswapStatWorker(ipfs *ipfs.Client, cfg *config.Config) *BitswapStatWorker {
-	return &BitswapStatWorker{ipfs: ipfs, cfg: cfg}
+func NewBitswapStatWorker(ipfs *ipfs.Client, cfg *config.Config, shutdownMgr *shutdown.Manager) *BitswapStatWorker {
+	return &BitswapStatWorker{ipfs: ipfs, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
 func (w *BitswapStatWorker) Start(ctx context.Context) error {
@@ -28,6 +30,10 @@ func (w *BitswapStatWorker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if w.shutdownMgr != nil && w.shutdownMgr.IsDraining() {
+				log.Log.Sugar().Info("Bitswap stat worker stopping due to drain mode")
+				return nil
+			}
 			if err := w.run(ctx); err != nil {
 				log.Log.Sugar().Errorf("Bitswap stat failed: %v", err)
 			}

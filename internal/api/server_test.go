@@ -10,6 +10,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/gin-gonic/gin"
@@ -67,10 +68,11 @@ func TestHandlePutPin_Filtered(t *testing.T) {
 	mq := &fakeMQ{}
 	cfg := &config.Config{}
 	cfg.Filter.SizeLimit = config.FileSize(1) // sizes >1 will be filtered
-	f := filter.New(cfg)
-	s := NewServer(fs, mq, f)
+	f := filter.NewSizeFilter(cfg)
+	shutdownMgr := shutdown.NewManager()
+	s := NewServer(fs, mq, f, shutdownMgr)
 	r := gin.Default()
-	s.Routes(r)
+	s.RegisterHandles(r)
 
 	req := httptest.NewRequest(http.MethodPut, "/pins/bafybeihtsfujfh73od4mr47jt24we7b6e77xx4c45ozegyjjvprltzhobi?size=2", bytes.NewBuffer(nil))
 	w := httptest.NewRecorder()
@@ -91,9 +93,10 @@ func TestHandlePutPin_NonFiltered_Enqueue(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	fs := &fakeStore{}
 	mq := &fakeMQ{}
-	s := NewServer(fs, mq, &filter.Filter{})
+	shutdownMgr := shutdown.NewManager()
+	s := NewServer(fs, mq, &filter.SizeFilter{}, shutdownMgr)
 	r := gin.Default()
-	s.Routes(r)
+	s.RegisterHandles(r)
 
 	req := httptest.NewRequest(http.MethodPut, "/pins/bafybeihtsfujfh73od4mr47jt24we7b6e77xx4c45ozegyjjvprltzhobi?size=0", nil)
 	w := httptest.NewRecorder()
@@ -110,7 +113,6 @@ func TestHandlePutPin_NonFiltered_Enqueue(t *testing.T) {
 		t.Fatalf("unexpected payload")
 	}
 
-	// 验证状态更新
 	rec := fs.m["bafybeihtsfujfh73od4mr47jt24we7b6e77xx4c45ozegyjjvprltzhobi"]
 	if rec == nil {
 		t.Fatalf("expected record to be stored")

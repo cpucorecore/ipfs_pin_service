@@ -5,12 +5,12 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 )
 
-type Filter struct {
+type SizeFilter struct {
 	sizeLimit int64
 }
 
-func New(cfg *config.Config) *Filter {
-	f := &Filter{}
+func NewSizeFilter(cfg *config.Config) *SizeFilter {
+	f := &SizeFilter{}
 	if cfg != nil {
 		f.sizeLimit = cfg.Filter.SizeLimit.Int64()
 	}
@@ -18,7 +18,7 @@ func New(cfg *config.Config) *Filter {
 	return f
 }
 
-func (f *Filter) ShouldFilter(size int64) bool {
+func (f *SizeFilter) ShouldFilter(size int64) bool {
 	if f.sizeLimit <= 0 {
 		monitor.ObserveFilter(false)
 		return false
@@ -32,4 +32,4 @@ func (f *Filter) ShouldFilter(size int64) bool {
 	return filtered
 }
 
-func (f *Filter) SizeLimit() int64 { return f.sizeLimit }
+func (f *SizeFilter) SizeLimit() int64 { return f.sizeLimit }

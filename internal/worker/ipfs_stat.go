@@ -7,16 +7,18 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type StatWorker struct {
-	ipfs *ipfs.Client
-	cfg  *config.Config
+	ipfs        *ipfs.Client
+	cfg         *config.Config
+	shutdownMgr *shutdown.Manager
 }
 
-func NewStatWorker(ipfs *ipfs.Client, cfg *config.Config) *StatWorker {
-	return &StatWorker{ipfs: ipfs, cfg: cfg}
+func NewStatWorker(ipfs *ipfs.Client, cfg *config.Config, shutdownMgr *shutdown.Manager) *StatWorker {
+	return &StatWorker{ipfs: ipfs, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
 func (w *StatWorker) Start(ctx context.Context) error {
@@ -28,6 +30,10 @@ func (w *StatWorker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if w.shutdownMgr.IsDraining() {
+				log.Log.Sugar().Info("Stat worker stopping due to drain mode")
+				return nil
+			}
 			if err := w.runStat(ctx); err != nil {
 				log.Log.Sugar().Errorf("Repo stat failed: %v", err)
 			}

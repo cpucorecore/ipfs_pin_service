@@ -126,17 +126,14 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	// Pin 成功后，入队 provide 请求
 	provideMsg := ProvideRequestMsg{Cid: cid}
 	provideBody, err := json.Marshal(provideMsg)
 	if err != nil {
 		log.Log.Sugar().Errorf("Pin[%s] marshal provide message err: %v", cid, err)
-		// 不返回错误，因为 pin 已经成功，只是 provide 入队失败
 	} else {
 		err = w.queue.Enqueue(ctx, w.cfg.RabbitMQ.Provide.Exchange, provideBody)
 		if err != nil {
 			log.Log.Sugar().Errorf("Pin[%s] enqueue provide err: %v", cid, err)
-			// 不返回错误，因为 pin 已经成功，只是 provide 入队失败
 		} else {
 			log.Log.Sugar().Infof("Pin[%s] enqueued provide request", cid)
 		}

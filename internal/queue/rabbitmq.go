@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -19,9 +20,10 @@ type RabbitMQ struct {
 	mu                sync.RWMutex
 	channel           *amqp.Channel
 	queueConfig       map[string]config.QueueConf
+	shutdownMgr       *shutdown.Manager
 }
 
-func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
+func NewRabbitMQ(cfg *config.Config, shutdownMgr *shutdown.Manager) (*RabbitMQ, error) {
 	connectionManager := NewConnectionManager(cfg.RabbitMQ.URL)
 	channel, err := connectionManager.CreateChannel()
 	if err != nil {
@@ -37,11 +39,12 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 		connectionManager: connectionManager,
 		channel:           channel,
 		queueConfig:       queueConfig,
+		shutdownMgr:       shutdownMgr,
 	}
 
-	// 初始化所有队列
-	if err := rabbitmq.setupAllQueues(channel, cfg); err != nil {
+	if err = rabbitmq.setupAllQueues(channel, cfg); err != nil {
 		channel.Close()
+		connectionManager.Close()
 		return nil, fmt.Errorf("setup queues: %w", err)
 	}
 
@@ -49,17 +52,14 @@ func NewRabbitMQ(cfg *config.Config) (*RabbitMQ, error) {
 }
 
 func (mq *RabbitMQ) setupAllQueues(channel *amqp.Channel, cfg *config.Config) error {
-	// 设置 Pin 队列
 	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Pin); err != nil {
 		return fmt.Errorf("setup pin queues: %w", err)
 	}
 
-	// 设置 Unpin 队列
 	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Unpin); err != nil {
 		return fmt.Errorf("setup unpin queues: %w", err)
 	}
 
-	// 设置 Provide 队列
 	if err := mq.setupExchangeAndQueue(channel, &cfg.RabbitMQ.Provide); err != nil {
 		return fmt.Errorf("setup provide queues: %w", err)
 	}
@@ -68,39 +68,36 @@ func (mq *RabbitMQ) setupAllQueues(channel *amqp.Channel, cfg *config.Config) er
 }
 
 func (mq *RabbitMQ) setupExchangeAndQueue(channel *amqp.Channel, queueConf *config.QueueConf) error {
-	// 声明主交换机
 	if err := channel.ExchangeDeclare(
 		queueConf.Exchange,
 		"direct",
-		true,  // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil,   // arguments
+		true,
+		false,
+		false,
+		false,
+		nil,
 	); err != nil {
 		return fmt.Errorf("declare exchange %s: %w", queueConf.Exchange, err)
 	}
 
-	// 声明死信交换机
 	if err := channel.ExchangeDeclare(
 		queueConf.DLX,
 		"direct",
-		true,  // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil,   // arguments
+		true,
+		false,
+		false,
+		false,
+		nil,
 	); err != nil {
 		return fmt.Errorf("declare DLX %s: %w", queueConf.DLX, err)
 	}
 
-	// 声明主队列
 	if _, err := channel.QueueDeclare(
 		queueConf.Queue,
-		true,  // durable
-		false, // auto-deleted
-		false, // exclusive
-		false, // no-wait
+		true,
+		false,
+		false,
+		false,
 		amqp.Table{
 			"x-dead-letter-exchange":    queueConf.DLX,
 			"x-dead-letter-routing-key": queueConf.RetryQueue,
@@ -109,13 +106,12 @@ func (mq *RabbitMQ) setupExchangeAndQueue(channel *amqp.Channel, queueConf *conf
 		return fmt.Errorf("declare queue %s: %w", queueConf.Queue, err)
 	}
 
-	// 声明重试队列
 	if _, err := channel.QueueDeclare(
 		queueConf.RetryQueue,
-		true,  // durable
-		false, // auto-deleted
-		false, // exclusive
-		false, // no-wait
+		true,
+		false,
+		false,
+		false,
 		amqp.Table{
 			"x-dead-letter-exchange":    queueConf.Exchange,
 			"x-dead-letter-routing-key": queueConf.Queue,
@@ -125,7 +121,6 @@ func (mq *RabbitMQ) setupExchangeAndQueue(channel *amqp.Channel, queueConf *conf
 		return fmt.Errorf("declare retry queue %s: %w", queueConf.RetryQueue, err)
 	}
 
-	// 绑定主队列
 	if err := channel.QueueBind(
 		queueConf.Queue,
 		queueConf.Queue,
@@ -136,7 +131,6 @@ func (mq *RabbitMQ) setupExchangeAndQueue(channel *amqp.Channel, queueConf *conf
 		return fmt.Errorf("bind queue %s: %w", queueConf.Queue, err)
 	}
 
-	// 绑定重试队列
 	if err := channel.QueueBind(
 		queueConf.RetryQueue,
 		queueConf.RetryQueue,
@@ -210,6 +204,7 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 	}
 
 	var err error
+	retry := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -221,17 +216,28 @@ func (mq *RabbitMQ) mustPublish(ctx context.Context, exchange, key string, body 
 		if err == nil {
 			break
 		} else {
-			log.Log.Sugar().Errorf("Failed to publish message to queue %s, body=[%s], err=[%s]", key, string(body), err.Error())
-			log.Log.Sugar().Debugf("channel IsClosed:%v", mq.getChannel().IsClosed())
+			retry++
+			log.Log.Sugar().Errorf("Failed to publish message to queue %s, body=[%s], err=[%s], channle IsClosed=[%v], retry=%d", key, string(body), err.Error(), mq.getChannel().IsClosed(), retry)
 			if mq.getChannel().IsClosed() {
 				log.Log.Sugar().Warnf("channel is closed, try to recreate it")
 				err = mq.mustRecreateChannel()
 				if err != nil {
+					log.Log.Sugar().Warnf("1recreate channel fail, connection stat:%v", mq.connectionManager.GetConnection().IsClosed())
 					return err
 				}
 			} else {
 				log.Log.Sugar().Warnf("channel is not closed, TODO check it")
 			}
+
+			if retry > 3 {
+				retry = 0
+				err = mq.mustRecreateChannel()
+				if err != nil {
+					log.Log.Sugar().Warnf("2recreate channel fail, connection stat:%v", mq.connectionManager.GetConnection().IsClosed())
+					return err
+				}
+			}
+			time.Sleep(time.Second)
 		}
 	}
 
@@ -320,6 +326,10 @@ func (mq *RabbitMQ) runConsumer(ctx context.Context, topic string, handler Deliv
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case <-mq.shutdownMgr.ShutdownCtx().Done():
+			log.Log.Sugar().Info("Consumer received shutdown signal, exiting")
+			return mq.shutdownMgr.ShutdownCtx().Err()
 
 		case err = <-channelClosed:
 			log.Log.Sugar().Warnf("channel closed with no error")

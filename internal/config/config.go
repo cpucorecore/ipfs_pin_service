@@ -74,8 +74,8 @@ type Config struct {
 	} `yaml:"filter"`
 }
 
-func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+func Load(name string) (*Config, error) {
+	data, err := os.ReadFile(name)
 	if err != nil {
 		return nil, err
 	}

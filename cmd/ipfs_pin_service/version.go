@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 )
 
@@ -39,4 +40,11 @@ func (i Info) String() string {
 		i.BuildTime,
 		i.GoVersion,
 	)
+}
+
+func ShowVersion(showVersion bool) {
+	if showVersion {
+		fmt.Println(GetVersion())
+		os.Exit(0)
+	}
 }

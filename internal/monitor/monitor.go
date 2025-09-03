@@ -147,7 +147,7 @@ func RecordBitswapStat(
 	bsMessagesReceived.Set(float64(messagesReceived))
 }
 
-func RegisterMetricsRoute(r *gin.Engine) {
+func RegisterHandles(r *gin.Engine) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 

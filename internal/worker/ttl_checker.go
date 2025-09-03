@@ -6,18 +6,20 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type TTLChecker struct {
-	store store.Store
-	queue queue.MessageQueue
-	cfg   *config.Config
+	store       store.Store
+	queue       queue.MessageQueue
+	cfg         *config.Config
+	shutdownMgr *shutdown.Manager
 }
 
-func NewTTLChecker(store store.Store, queue queue.MessageQueue, cfg *config.Config) *TTLChecker {
-	return &TTLChecker{store: store, queue: queue, cfg: cfg}
+func NewTTLChecker(store store.Store, queue queue.MessageQueue, cfg *config.Config, shutdownMgr *shutdown.Manager) *TTLChecker {
+	return &TTLChecker{store: store, queue: queue, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
 func (c *TTLChecker) Start(ctx context.Context) error {
@@ -29,6 +31,10 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if c.shutdownMgr.IsDraining() {
+				log.Log.Sugar().Info("TTL checker stopping due to drain mode")
+				return nil
+			}
 			if err := c.checkTTL(ctx); err != nil {
 				log.Log.Sugar().Errorf("checkTTL error: %v", err)
 			}

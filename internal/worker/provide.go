@@ -88,7 +88,7 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	}
 
 	provideStartTime := time.Now()
-	// 根据配置决定是否使用递归provide
+
 	var opType string
 	if w.cfg.Workers.ProvideRecursive {
 		err = w.ipfs.ProvideRecursive(timeoutCtx, cid)

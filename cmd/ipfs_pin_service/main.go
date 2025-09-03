@@ -9,8 +9,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
+	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/api"
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
@@ -18,6 +18,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
 	"github.com/cpucorecore/ipfs_pin_service/internal/worker"
@@ -31,27 +32,16 @@ func main() {
 	pprofPort := flag.Int("pprof-port", 6060, "Port for pprof debugging")
 	flag.Parse()
 
-	if *showVersion {
-		fmt.Println(GetVersion())
-		os.Exit(0)
-	}
-
-	log.InitLoggerForTest()
+	ShowVersion(*showVersion)
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Log.Sugar().Fatalf("Failed to load config: %v", err)
+		panic(fmt.Sprintf("load config error: %s", err))
 	}
 
 	log.InitLoggerWithConfig(cfg)
 
-	go func() {
-		pprofAddr := fmt.Sprintf(":%d", *pprofPort)
-		log.Log.Sugar().Infof("Starting pprof server on %s", pprofAddr)
-		if err = http.ListenAndServe(pprofAddr, nil); err != nil {
-			log.Log.Sugar().Errorf("pprof server error: %v", err)
-		}
-	}()
+	StartPprof(*pprofPort)
 
 	pebbleStore, err := store.NewPebbleStore(".db")
 	if err != nil {
@@ -59,116 +49,109 @@ func main() {
 	}
 	defer pebbleStore.Close()
 
-	mq, err := queue.NewRabbitMQ(cfg)
+	shutdownMgr := shutdown.NewManager()
+	mq, err := queue.NewRabbitMQ(cfg, shutdownMgr)
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create queue: %v", err)
 	}
 	defer mq.Close()
 
-	f := filter.New(cfg)
-	server := api.NewServer(pebbleStore, mq, f)
-	router := gin.Default()
-	server.Routes(router)
-	monitor.RegisterMetricsRoute(router)
+	sizeFilter := filter.NewSizeFilter(cfg)
+	apiServer := api.NewServer(pebbleStore, mq, sizeFilter, shutdownMgr)
+	ginEngine := gin.Default()
+	apiServer.RegisterHandles(ginEngine)
+	monitor.RegisterHandles(ginEngine)
 
 	policy := ttl.NewPolicy(cfg)
 	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
 	pinWorker := worker.NewPinWorker(pebbleStore, mq, ipfsClient, policy, cfg)
 	unpinWorker := worker.NewUnpinWorker(pebbleStore, mq, ipfsClient, cfg)
 	provideWorker := worker.NewProvideWorker(pebbleStore, mq, ipfsClient, cfg)
-	gcWorker := worker.NewGCWorker(ipfsClient, cfg)
-	statWorker := worker.NewStatWorker(ipfsClient, cfg)
-	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg)
-	queueMonitor := worker.NewQueueMonitor(mq, cfg)
-	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg)
+	gcWorker := worker.NewGCWorker(ipfsClient, cfg, shutdownMgr)
+	statWorker := worker.NewStatWorker(ipfsClient, cfg, shutdownMgr)
+	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg, shutdownMgr)
+	queueMonitor := worker.NewQueueMonitor(mq, cfg, shutdownMgr)
+	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg, shutdownMgr)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = pinWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = pinWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Pin worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = unpinWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = unpinWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Unpin worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = provideWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = provideWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Provide worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = gcWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = gcWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("GC worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = ttlChecker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = ttlChecker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("TTL checker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = statWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = statWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Stat worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = bitswapStatWorker.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = bitswapStatWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Bitswap stat worker stopped: %v", err)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err = queueMonitor.Start(ctx); err != nil {
+	shutdownMgr.Go(func() {
+		if err = queueMonitor.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Queue monitor stopped: %v", err)
 		}
-	}()
+	})
 
-	srv := &http.Server{
+	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler: router,
+		Handler: ginEngine,
 	}
 
 	go func() {
-		if err = srv.ListenAndServe(); err != nil && !errors.Is(http.ErrServerClosed, err) {
+		if err = httpServer.ListenAndServe(); err != nil && !errors.Is(http.ErrServerClosed, err) {
 			log.Log.Sugar().Errorf("HTTP server error: %v", err)
 		}
 	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
 
-	cancel()
-	if err = srv.Shutdown(context.Background()); err != nil {
+	<-sigChan
+	log.Log.Sugar().Info("Received shutdown signal, entering drain mode...")
+
+	shutdownMgr.StartDrain()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err = httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Log.Sugar().Errorf("HTTP server shutdown error: %v", err)
 	}
-	wg.Wait()
+
+	shutdownMgr.WaitForCompletion()
+	log.Log.Sugar().Info("Shutdown complete")
+
+	os.Exit(0)
 }

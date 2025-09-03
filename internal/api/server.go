@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
+	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
@@ -16,29 +17,39 @@ import (
 )
 
 type Server struct {
-	store  store.Store
-	queue  MessageQueue
-	filter *filter.Filter
+	store       store.Store
+	queue       MessageQueue
+	sizeFilter  *filter.SizeFilter
+	shutdownMgr *shutdown.Manager
 }
 
 type MessageQueue interface {
 	Enqueue(ctx context.Context, topic string, body []byte) error
 }
 
-func NewServer(store store.Store, queue MessageQueue, f *filter.Filter) *Server {
+func NewServer(store store.Store, queue MessageQueue, sizeFilter *filter.SizeFilter, shutdownMgr *shutdown.Manager) *Server {
 	return &Server{
-		store:  store,
-		queue:  queue,
-		filter: f,
+		store:       store,
+		queue:       queue,
+		sizeFilter:  sizeFilter,
+		shutdownMgr: shutdownMgr,
 	}
 }
 
-func (s *Server) Routes(r *gin.Engine) {
+func (s *Server) RegisterHandles(r *gin.Engine) {
 	r.PUT("/pins/:cid", s.handlePutPin)
 	r.GET("/pins/:cid", s.handleGetPin)
 }
 
 func (s *Server) handlePutPin(c *gin.Context) {
+	if s.shutdownMgr.IsDraining() {
+		log.Log.Sugar().Warnf("api: service is shutting down")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "service is shutting down, no longer accepting new requests",
+		})
+		return
+	}
+
 	cidStr := c.Param("cid")
 	if cidStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
@@ -96,9 +107,9 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 	}
 
-	if s.filter.ShouldFilter(size) {
+	if s.sizeFilter.ShouldFilter(size) {
 		pinRecord.Status = store.StatusFiltered
-		pinRecord.SizeLimit = s.filter.SizeLimit()
+		pinRecord.SizeLimit = s.sizeFilter.SizeLimit()
 		if err = s.store.Put(c, pinRecord); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

@@ -2,10 +2,11 @@ package queue
 
 import (
 	"context"
-	"github.com/cpucorecore/ipfs_pin_service/log"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"sync"
 	"time"
+
+	"github.com/cpucorecore/ipfs_pin_service/log"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type ConnectionManager interface {
@@ -120,7 +121,6 @@ func (m *connectionManagerImpl) GetConnection() *amqp.Connection {
 
 	connection = m.mustConnect()
 	m.setConnection(connection)
-	go m.monitorConnection(connection)
 	return connection
 }
 
