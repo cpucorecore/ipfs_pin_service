@@ -58,28 +58,32 @@ func (f *fakeStore) Close() error {
 
 type fakeMQ struct{ payloads [][]byte }
 
-func (q *fakeMQ) EnqueuePin(ctx context.Context, body []byte) error {
-	q.payloads = append(q.payloads, body)
+func (q *fakeMQ) EnqueuePin(data []byte) error {
+	q.payloads = append(q.payloads, data)
 	return nil
 }
 
-func (q *fakeMQ) EnqueueUnpin(ctx context.Context, body []byte) error {
-	q.payloads = append(q.payloads, body)
+func (q *fakeMQ) EnqueueUnpin(data []byte) error {
+	q.payloads = append(q.payloads, data)
 	return nil
 }
 
-func (q *fakeMQ) EnqueueProvide(ctx context.Context, body []byte) error {
-	q.payloads = append(q.payloads, body)
+func (q *fakeMQ) EnqueueProvide(data []byte) error {
+	q.payloads = append(q.payloads, data)
 	return nil
 }
 
-func (q *fakeMQ) DequeueConcurrent(ctx context.Context, queue string, concurrency int, handler mq.MsgHandler) error {
-	return nil
+func (q *fakeMQ) StartPinConsumer(handler mq.MsgHandler) {
 }
 
-func (q *fakeMQ) Stats(ctx context.Context, queue string) (mq.Stats, error) {
-	var stats mq.Stats
-	return stats, nil
+func (q *fakeMQ) StartUnpinConsumer(handler mq.MsgHandler) {
+}
+
+func (q *fakeMQ) StartProvideConsumer(handler mq.MsgHandler) {
+}
+
+func (q *fakeMQ) Stats(queue string) (int, int, error) {
+	return 0, 0, nil
 }
 
 func (q *fakeMQ) Close() error {
