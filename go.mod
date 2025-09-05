@@ -9,6 +9,7 @@ require (
 	github.com/ipfs/go-cid v0.5.0
 	github.com/ipfs/kubo v0.37.0
 	github.com/prometheus/client_golang v1.23.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/stretchr/testify v1.11.0
 	github.com/wagslane/go-rabbitmq v0.15.0
 	go.uber.org/zap v1.27.0
@@ -100,7 +101,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

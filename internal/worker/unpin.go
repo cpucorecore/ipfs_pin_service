@@ -40,8 +40,8 @@ func NewUnpinWorker(
 	}
 }
 
-func (w *UnpinWorker) Start(ctx context.Context) {
-	w.queue.StartUnpinConsumer(w.handleMessage)
+func (w *UnpinWorker) Start() {
+	w.queue.StartUnpinConsumer(w.handleMsg)
 }
 
 func IsDuplicateUnpinError(err error, cid string) bool {
@@ -52,30 +52,30 @@ func IsDuplicateUnpinError(err error, cid string) bool {
 	return isDuplicate
 }
 
-func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
+func (w *UnpinWorker) handleMsg(ctx context.Context, body []byte) error {
 	cid := string(body)
+
+	if !util.CheckCid(cid) {
+		log.Log.Error("check cid fail", zap.String("module", "UnpinWorker"), zap.String("cid", cid))
+		return nil
+	}
+
 	log.Log.Info(cid,
 		zap.String("op", "unpin"),
 		zap.String("step", "start"))
-
-	if !util.CheckCid(cid) {
-		log.Log.Warn("wrong cid", zap.String("cid", cid))
-		return nil
-	}
 
 	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusUnpinning
 		r.UnpinStartAt = time.Now().UnixMilli()
 		return nil
 	}); err != nil {
-		log.Log.Error("update status err", zap.String("cid", cid), zap.Error(err))
-		return err
+		return w.handleUnpinError(ctx, cid, err)
 	}
 
-	ctxUnpin := ctx
+	timeoutCtx := ctx
 	var cancel context.CancelFunc
 	if w.timeout > 0 {
-		ctxUnpin, cancel = context.WithTimeout(ctx, w.timeout)
+		timeoutCtx, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
 
@@ -84,7 +84,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
-	err := w.ipfs.PinRm(ctxUnpin, cid)
+	err := w.ipfs.PinRm(timeoutCtx, cid)
 	endTs := time.Now()
 	duration := endTs.Sub(startTs)
 

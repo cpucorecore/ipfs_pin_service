@@ -15,44 +15,70 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
+type ProvideFunc func(ctx context.Context, cid string) error
+
 type ProvideWorker struct {
-	maxRetry  int
-	timeout   time.Duration
-	recursive bool
-	store     store.Store
-	queue     mq.Queue
-	ipfs      *ipfs.Client
+	maxRetry    int
+	timeout     time.Duration
+	provideFunc ProvideFunc
+	opType      string
+	store       store.Store
+	queue       mq.Queue
+	ipfsCli     *ipfs.Client
 }
 
 func NewProvideWorker(
 	maxRetry int,
 	timeout time.Duration,
-	recursive bool,
+	provideRecursive bool,
 	store store.Store,
 	queue mq.Queue,
-	ipfs *ipfs.Client,
+	ipfsCli *ipfs.Client,
 ) *ProvideWorker {
-	return &ProvideWorker{
-		maxRetry:  maxRetry,
-		timeout:   timeout,
-		recursive: recursive,
-		store:     store,
-		queue:     queue,
-		ipfs:      ipfs,
+	log.Log.Info("provide mode", zap.Bool("provideRecursive", provideRecursive))
+
+	pw := &ProvideWorker{
+		maxRetry: maxRetry,
+		timeout:  timeout,
+		store:    store,
+		queue:    queue,
+		ipfsCli:  ipfsCli,
 	}
+
+	if provideRecursive {
+		pw.provideFunc = pw.ProvideRecursive
+		pw.opType = monitor.OpProvideRecursive
+	} else {
+		pw.provideFunc = pw.Provide
+		pw.opType = monitor.OpProvide
+	}
+
+	return pw
+}
+
+func (w *ProvideWorker) Provide(ctx context.Context, cid string) error {
+	return w.ipfsCli.Provide(ctx, cid)
+}
+
+func (w *ProvideWorker) ProvideRecursive(ctx context.Context, cid string) error {
+	return w.ipfsCli.ProvideRecursive(ctx, cid)
 }
 
 func (w *ProvideWorker) Start() {
-	w.queue.StartProvideConsumer(w.handleProvideMessage)
+	w.queue.StartProvideConsumer(w.handleMsg)
 }
 
-func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) error {
+func (w *ProvideWorker) handleMsg(ctx context.Context, body []byte) error {
 	cid := string(body)
 
 	if !util.CheckCid(cid) {
-		log.Log.Warn("check cid fail", zap.String("module", "ProvideWorker"), zap.String("cid", cid))
+		log.Log.Error("check cid fail", zap.String("module", "ProvideWorker"), zap.String("cid", cid))
 		return nil
 	}
+
+	log.Log.Info(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "start"))
 
 	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {
@@ -60,28 +86,19 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	}
 
 	if pinRecord == nil || pinRecord.PinSucceededAt == 0 {
-		log.Log.Warn("cid not pinned yet, skip provide", zap.String("cid", cid))
+		log.Log.Error("cid not pinned, skip provide", zap.String("cid", cid))
 		return nil
 	}
 
-	if pinRecord.ProvideSucceededAt > 0 {
-		log.Log.Info("cid already provided, skip", zap.String("cid", cid))
-		return nil
-	}
-
-	pinRecord.ProvideStartAt = time.Now().UnixMilli()
+	now := time.Now()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.ProvideStartAt = pinRecord.ProvideStartAt
-		r.ProvideAttemptCount++
+		r.ProvideStartAt = now.UnixMilli()
 		return nil
 	})
 	if err != nil {
 		return w.handleProvideError(ctx, cid, err)
 	}
 
-	log.Log.Info(cid,
-		zap.String("op", "provide"),
-		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
 	if w.timeout > 0 {
@@ -94,31 +111,18 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
-
-	var opType string
-	var mode string
-	if w.recursive {
-		err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
-		opType = monitor.OpProvideRecursive
-		mode = "recursive"
-	} else {
-		err = w.ipfs.Provide(timeoutCtx, cid)
-		opType = monitor.OpProvide
-		mode = "non-recursive"
-	}
+	err = w.provideFunc(timeoutCtx, cid)
 	endTs := time.Now()
 	duration := endTs.Sub(startTs)
+	monitor.ObserveOperation(w.opType, duration, err)
+	if err != nil {
+		return w.handleProvideError(ctx, cid, err)
+	}
 
 	log.Log.Info(cid,
 		zap.String("op", "provide"),
 		zap.String("step", "ipfs end"),
-		zap.String("mode", mode),
 		zap.Duration("duration", duration))
-
-	if err != nil {
-		return w.handleProvideError(ctx, cid, err)
-	}
-	monitor.ObserveOperation(opType, duration, err)
 
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.ProvideSucceededAt = endTs.UnixMilli()
@@ -128,7 +132,6 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	if err != nil {
 		return w.handleProvideError(ctx, cid, err)
 	}
-
 	return nil
 }
 

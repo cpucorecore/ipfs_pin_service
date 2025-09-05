@@ -6,11 +6,15 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
+	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProvideWorker(t *testing.T) {
+	// 初始化测试日志
+	log.InitLoggerForTest()
+
 	// 创建测试用的 store
 	testStore, err := store.NewPebbleStore("test_provide.db")
 	require.NoError(t, err)
@@ -26,9 +30,9 @@ func TestProvideWorker(t *testing.T) {
 	// 测试 worker 创建
 	assert.NotNil(t, worker)
 	assert.Equal(t, testStore, worker.store)
-	assert.Equal(t, ipfsClient, worker.ipfs)
+	assert.NotNil(t, worker.provideFunc)
 	assert.Equal(t, 3, worker.maxRetry)
-	assert.Equal(t, false, worker.recursive)
+	assert.Equal(t, "provide", worker.opType)
 }
 
 func TestProvideWorker_MessageFormat(t *testing.T) {

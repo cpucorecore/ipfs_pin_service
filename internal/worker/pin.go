@@ -50,10 +50,10 @@ type PinMsg struct {
 }
 
 func (w *PinWorker) Start() {
-	w.queue.StartPinConsumer(w.handlePinMsg)
+	w.queue.StartPinConsumer(w.handleMsg)
 }
 
-func (w *PinWorker) handlePinMsg(ctx context.Context, data []byte) error {
+func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 	pinMsg := &PinMsg{}
 	if err := json.Unmarshal(data, pinMsg); err != nil {
 		log.Log.Error("json.Unmarshal err", zap.String("module", "PinWorker"), zap.String("data", string(data)), zap.Error(err))
@@ -111,14 +111,15 @@ func (w *PinWorker) handlePinMsg(ctx context.Context, data []byte) error {
 	endTs := time.Now()
 	duration := endTs.Sub(startTs)
 	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
+	if err != nil {
+		return w.handlePinError(ctx, cid, err)
+	}
+
 	log.Log.Info(cid,
 		zap.String("op", "pin"),
 		zap.String("step", "ipfs end"),
 		zap.Duration("duration", duration))
 
-	if err != nil {
-		return w.handlePinError(ctx, cid, err)
-	}
 	ttl, bucket := w.ttlPolicy.ComputeTTL(pinRecord.Size)
 	expireTs := endTs.Add(ttl).UnixMilli()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {

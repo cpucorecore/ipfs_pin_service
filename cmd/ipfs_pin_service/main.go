@@ -82,7 +82,7 @@ func main() {
 	})
 
 	shutdownMgr.Go(func() {
-		unpinWorker.Start(ctx)
+		unpinWorker.Start()
 	})
 
 	shutdownMgr.Go(func() {
