@@ -159,6 +159,7 @@ func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, prov
 	}
 
 	if provideAttemptCount < int32(w.maxRetry) {
+		time.Sleep(time.Millisecond * 300)
 		return ErrProvideRetry
 	}
 

@@ -131,6 +131,7 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 	}
 
 	if unpinAttemptCount < int32(w.maxRetry) {
+		time.Sleep(time.Millisecond * 300)
 		return ErrUnpinRetry
 	}
 

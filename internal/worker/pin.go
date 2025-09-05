@@ -180,6 +180,7 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 	}
 
 	if pinAttemptCount < int32(w.maxRetry) {
+		time.Sleep(time.Millisecond * 300)
 		return ErrPinRetry
 	}
 
