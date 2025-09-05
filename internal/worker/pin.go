@@ -8,7 +8,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
@@ -19,51 +18,55 @@ import (
 )
 
 type PinWorker struct {
-	store  store.Store
-	queue  mq.Queue
-	ipfs   *ipfs.Client
-	policy *ttl.Policy
-	cfg    *config.Config
+	maxRetry  int
+	timeout   time.Duration
+	store     store.Store
+	queue     mq.Queue
+	ipfsCli   *ipfs.Client
+	ttlPolicy *ttl.Policy
 }
 
 func NewPinWorker(
+	maxRetry int,
+	timeout time.Duration,
 	store store.Store,
 	queue mq.Queue,
-	ipfs *ipfs.Client,
-	policy *ttl.Policy,
-	cfg *config.Config,
+	ipfsCli *ipfs.Client,
+	ttlPolicy *ttl.Policy,
 ) *PinWorker {
 	return &PinWorker{
-		store:  store,
-		queue:  queue,
-		ipfs:   ipfs,
-		policy: policy,
-		cfg:    cfg,
+		maxRetry:  maxRetry,
+		timeout:   timeout,
+		store:     store,
+		queue:     queue,
+		ipfsCli:   ipfsCli,
+		ttlPolicy: ttlPolicy,
 	}
 }
 
-type PinRequestMsg struct {
+type PinMsg struct {
 	Cid  string `json:"cid"`
 	Size int64  `json:"size"`
 }
 
 func (w *PinWorker) Start() {
-	w.queue.StartPinConsumer(w.handlePinMessage)
+	w.queue.StartPinConsumer(w.handlePinMsg)
 }
 
-func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
-	var req PinRequestMsg
-	if err := json.Unmarshal(body, &req); err != nil {
-		log.Log.Sugar().Errorf("PinWorker parse request[%s] err: %v", string(body), err)
+func (w *PinWorker) handlePinMsg(ctx context.Context, data []byte) error {
+	pinMsg := &PinMsg{}
+	if err := json.Unmarshal(data, pinMsg); err != nil {
+		log.Log.Error("json.Unmarshal err", zap.String("module", "PinWorker"), zap.String("data", string(data)), zap.Error(err))
 		return err
 	}
 
-	if !util.CheckCid(req.Cid) {
-		log.Log.Sugar().Warnf("PinWorker check cid[%s] fail", req.Cid)
+	if !util.CheckCid(pinMsg.Cid) {
+		log.Log.Warn("check cid fail", zap.String("module", "PinWorker"), zap.String("cid", pinMsg.Cid))
 		return nil
 	}
 
-	cid := req.Cid
+	cid := pinMsg.Cid
+	size := pinMsg.Size
 	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
@@ -73,7 +76,7 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		pinRecord = &store.PinRecord{
 			Cid:        cid,
 			Status:     store.StatusReceived,
-			Size:       req.Size,
+			Size:       size,
 			ReceivedAt: time.Now().UnixMilli(),
 		}
 		err = w.store.Put(ctx, pinRecord)
@@ -81,8 +84,8 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 			return w.handlePinError(ctx, cid, err)
 		}
 	}
-	pinRecord.Size = req.Size
 
+	pinRecord.Size = size
 	pinRecord.Status = store.StatusPinning
 	pinRecord.PinStartAt = time.Now().UnixMilli()
 	err = w.store.Put(ctx, pinRecord)
@@ -95,19 +98,19 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
-	if w.cfg.Workers.PinTimeout > 0 {
-		timeoutCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
+	if w.timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
 	log.Log.Info(cid,
 		zap.String("op", "pin"),
 		zap.String("step", "ipfs start"))
 
-	pinStartTime := time.Now()
-	err = w.ipfs.PinAdd(timeoutCtx, cid)
-	pinEndTime := time.Now()
-	duration := pinEndTime.Sub(pinStartTime)
-
+	startTs := time.Now()
+	err = w.ipfsCli.PinAdd(timeoutCtx, cid)
+	endTs := time.Now()
+	duration := endTs.Sub(startTs)
+	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
 	log.Log.Info(cid,
 		zap.String("op", "pin"),
 		zap.String("step", "ipfs end"),
@@ -116,29 +119,26 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
-	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
-
-	ttl, bucket := w.policy.ComputeTTL(pinRecord.Size)
-	expireAt := pinEndTime.Add(ttl).UnixMilli()
+	ttl, bucket := w.ttlPolicy.ComputeTTL(pinRecord.Size)
+	expireTs := endTs.Add(ttl).UnixMilli()
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.Status = store.StatusActive
-		r.PinSucceededAt = pinEndTime.UnixMilli()
-		r.ExpireAt = expireAt
+		r.PinSucceededAt = endTs.UnixMilli()
+		r.ExpireAt = expireTs
 		return nil
 	})
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	if err = w.store.AddExpireIndex(ctx, cid, expireAt); err != nil {
-		log.Log.Sugar().Errorf("Pin[%s] add expire index err: %v", cid, err)
+	if err = w.store.AddExpireIndex(ctx, cid, expireTs); err != nil {
+		log.Log.Error("add expire index err", zap.String("cid", cid), zap.Error(err))
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	provideBody := []byte(cid)
-	err = w.queue.EnqueueProvide(provideBody)
+	err = w.queue.EnqueueProvide([]byte(cid))
 	if err != nil {
-		log.Log.Sugar().Errorf("Pin[%s] enqueue provide err: %v", cid, err)
+		log.Log.Error("enqueue provide queue err", zap.String("cid", cid), zap.Error(err))
 	} else {
 		log.Log.Info(cid,
 			zap.String("op", "pin"),
@@ -148,15 +148,16 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	log.Log.Info(cid,
 		zap.String("op", "pin"),
 		zap.String("step", "end"),
-		zap.Int64("file_size", pinRecord.Size),
-		zap.String("ttl_bucket", bucket))
-	monitor.ObserveFileSize(pinRecord.Size)
+		zap.Int64("size", size),
+		zap.String("bucket", bucket))
+	monitor.ObserveFileSize(size)
 	monitor.ObserveTTLBucket(bucket)
 	return nil
 }
 
 var (
-	ErrPinRetry = errors.New("pin retry")
+	ErrPinRetry      = errors.New("pin retry")
+	ErrOutOfMaxRetry = errors.New("out of max retry")
 )
 
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error) error {
@@ -169,7 +170,7 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.PinAttemptCount++
 		pinAttemptCount = r.PinAttemptCount
-		if r.PinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
+		if r.PinAttemptCount >= int32(w.maxRetry) {
 			r.Status = store.StatusDeadLetter
 		}
 		return nil
@@ -178,10 +179,13 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 		return err
 	}
 
-	if pinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+	if pinAttemptCount < int32(w.maxRetry) {
 		return ErrPinRetry
 	}
 
-	log.Log.Sugar().Infof("Pin[%s] out of max retry", cid)
+	log.Log.Error(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "err"),
+		zap.Error(ErrOutOfMaxRetry))
 	return nil
 }

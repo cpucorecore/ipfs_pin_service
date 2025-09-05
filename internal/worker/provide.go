@@ -45,7 +45,7 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	cid := string(body)
 
 	if !util.CheckCid(cid) {
-		log.Log.Sugar().Warnf("ProvideWorker check cid[%s] fail", cid)
+		log.Log.Warn("check cid fail", zap.String("module", "ProvideWorker"), zap.String("cid", cid))
 		return nil
 	}
 
@@ -55,12 +55,12 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	}
 
 	if pinRecord == nil || pinRecord.PinSucceededAt == 0 {
-		log.Log.Sugar().Warnf("ProvideWorker cid[%s] not pinned yet, skip provide", cid)
+		log.Log.Warn("cid not pinned yet, skip provide", zap.String("cid", cid))
 		return nil
 	}
 
 	if pinRecord.ProvideSucceededAt > 0 {
-		log.Log.Sugar().Infof("ProvideWorker cid[%s] already provided, skip", cid)
+		log.Log.Info("cid already provided, skip", zap.String("cid", cid))
 		return nil
 	}
 
@@ -154,6 +154,6 @@ func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, prov
 		return ErrProvideRetry
 	}
 
-	log.Log.Sugar().Infof("Provide[%s] out of max retry", cid)
+	log.Log.Info("out of max retry", zap.String("cid", cid))
 	return nil
 }

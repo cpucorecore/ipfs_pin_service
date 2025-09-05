@@ -45,7 +45,7 @@ func (w *UnpinWorker) Start(ctx context.Context) {
 func IsDuplicateUnpinError(err error, cid string) bool {
 	isDuplicate := strings.Contains(err.Error(), "not pinned or pinned indirectly")
 	if isDuplicate {
-		log.Log.Sugar().Warnf("Unpin[%s] duplicate unpin", cid)
+		log.Log.Warn("duplicate unpin", zap.String("cid", cid))
 	}
 	return isDuplicate
 }
@@ -57,7 +57,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		zap.String("step", "start"))
 
 	if !util.CheckCid(cid) {
-		log.Log.Sugar().Warnf("Unpin[%s] wrong cid", cid)
+		log.Log.Warn("wrong cid", zap.String("cid", cid))
 		return nil
 	}
 
@@ -66,7 +66,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		r.UnpinStartAt = time.Now().UnixMilli()
 		return nil
 	}); err != nil {
-		log.Log.Sugar().Errorf("Unpin[%s] update status err: %v", cid, err)
+		log.Log.Error("update status err", zap.String("cid", cid), zap.Error(err))
 		return err
 	}
 
@@ -132,6 +132,6 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 		return ErrUnpinRetry
 	}
 
-	log.Log.Sugar().Warnf("Unpin[%s] out of max retry", cid)
+	log.Log.Warn("out of max retry", zap.String("cid", cid))
 	return nil
 }

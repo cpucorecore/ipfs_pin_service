@@ -24,6 +24,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/worker"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 
 	pebbleStore, err := store.NewPebbleStore(".db")
 	if err != nil {
-		log.Log.Sugar().Fatalf("Failed to create store: %v", err)
+		log.Log.Fatal("Failed to create store", zap.Error(err))
 	}
 	defer pebbleStore.Close()
 
@@ -64,7 +65,7 @@ func main() {
 
 	policy := ttl.NewPolicy(cfg)
 	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
-	pinWorker := worker.NewPinWorker(pebbleStore, mq, ipfsClient, policy, cfg)
+	pinWorker := worker.NewPinWorker(cfg.Workers.MaxRetries, cfg.Workers.PinTimeout, pebbleStore, mq, ipfsClient, policy)
 	unpinWorker := worker.NewUnpinWorker(pebbleStore, mq, ipfsClient, cfg)
 	provideWorker := worker.NewProvideWorker(pebbleStore, mq, ipfsClient, cfg)
 	gcWorker := worker.NewGCWorker(ipfsClient, cfg, shutdownMgr)

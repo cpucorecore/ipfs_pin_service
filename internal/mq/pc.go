@@ -34,7 +34,7 @@ func (p *PC) StartConsume(ctx context.Context, handler MsgHandler) {
 			return rabbitmq.Ack
 		})
 		if err != nil {
-			log.Log.Sugar().Error("consumer[%s] run error", p.cfg.ConsumerName, zap.Error(err))
+			log.Log.Error("consumer run error", zap.String("consumer", p.cfg.ConsumerName), zap.Error(err))
 		}
 	}()
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/view_model"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -39,20 +40,20 @@ func (s *Server) RegisterHandles(r *gin.Engine) {
 
 func (s *Server) handlePutPin(c *gin.Context) {
 	if s.shutdownMgr.IsDraining() {
-		log.Log.Sugar().Warnf("api: service is shutting down")
+		log.Log.Warn("service is shutting down", zap.String("module", "api"))
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "service is shutting down, no longer accepting new requests",
 		})
 		return
 	}
 
-	cidStr := c.Param("cid")
-	if cidStr == "" {
+	cid := c.Param("cid")
+	if cid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
 		return
 	}
 
-	if !util.CheckCid(cidStr) {
+	if !util.CheckCid(cid) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
 		return
 	}
@@ -68,7 +69,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		}
 	}
 
-	pinRecord, err := s.store.Get(c, cidStr)
+	pinRecord, err := s.store.Get(c, cid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -77,7 +78,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	now := time.Now().UnixMilli()
 	if pinRecord == nil {
 		pinRecord = &store.PinRecord{
-			Cid:        cidStr,
+			Cid:        cid,
 			Size:       size,
 			Status:     store.StatusReceived,
 			ReceivedAt: now,
@@ -93,7 +94,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 			store.AppendHistory(pinRecord, lastPinRecord, history)
 
 		case store.StatusFiltered:
-			log.Log.Sugar().Infof("CID %s is filtered, skipping renewal", cidStr)
+			log.Log.Info("CID is filtered, skipping renewal", zap.String("cid", cid))
 			c.JSON(http.StatusOK, view_model.ConvertPinRecord(pinRecord, view_model.TimeFormatISO))
 			return
 
@@ -115,7 +116,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
-	body, _ := json.Marshal(gin.H{"cid": cidStr, "size": pinRecord.Size})
+	body, _ := json.Marshal(gin.H{"cid": cid, "size": pinRecord.Size})
 	err = s.queue.EnqueuePin(body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

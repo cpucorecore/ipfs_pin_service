@@ -31,7 +31,7 @@ func (w *QueueMonitor) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if w.shutdownMgr != nil && w.shutdownMgr.IsDraining() {
-				log.Log.Sugar().Info("Queue monitor stopping due to drain mode")
+				log.Log.Info("Queue monitor stopping due to drain mode")
 				return nil
 			}
 			w.sample()
