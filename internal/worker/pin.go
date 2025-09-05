@@ -156,8 +156,7 @@ func (w *PinWorker) handlePinMsg(ctx context.Context, data []byte) error {
 }
 
 var (
-	ErrPinRetry      = errors.New("pin retry")
-	ErrOutOfMaxRetry = errors.New("out of max retry")
+	ErrPinRetry = errors.New("pin retry")
 )
 
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error) error {

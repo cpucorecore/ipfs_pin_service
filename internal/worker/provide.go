@@ -7,7 +7,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
@@ -17,23 +16,29 @@ import (
 )
 
 type ProvideWorker struct {
-	store store.Store
-	queue mq.Queue
-	ipfs  *ipfs.Client
-	cfg   *config.Config
+	maxRetry  int
+	timeout   time.Duration
+	recursive bool
+	store     store.Store
+	queue     mq.Queue
+	ipfs      *ipfs.Client
 }
 
 func NewProvideWorker(
+	maxRetry int,
+	timeout time.Duration,
+	recursive bool,
 	store store.Store,
 	queue mq.Queue,
 	ipfs *ipfs.Client,
-	cfg *config.Config,
 ) *ProvideWorker {
 	return &ProvideWorker{
-		store: store,
-		queue: queue,
-		ipfs:  ipfs,
-		cfg:   cfg,
+		maxRetry:  maxRetry,
+		timeout:   timeout,
+		recursive: recursive,
+		store:     store,
+		queue:     queue,
+		ipfs:      ipfs,
 	}
 }
 
@@ -79,8 +84,8 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
-	if w.cfg.Workers.ProvideTimeout > 0 {
-		timeoutCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.ProvideTimeout)
+	if w.timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
 
@@ -88,11 +93,11 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		zap.String("op", "provide"),
 		zap.String("step", "ipfs start"))
 
-	provideStartTime := time.Now()
+	startTs := time.Now()
 
 	var opType string
 	var mode string
-	if w.cfg.Workers.ProvideRecursive {
+	if w.recursive {
 		err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
 		opType = monitor.OpProvideRecursive
 		mode = "recursive"
@@ -101,8 +106,8 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		opType = monitor.OpProvide
 		mode = "non-recursive"
 	}
-	provideEndTime := time.Now()
-	duration := provideEndTime.Sub(provideStartTime)
+	endTs := time.Now()
+	duration := endTs.Sub(startTs)
 
 	log.Log.Info(cid,
 		zap.String("op", "provide"),
@@ -116,7 +121,7 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 	monitor.ObserveOperation(opType, duration, err)
 
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
-		r.ProvideSucceededAt = provideEndTime.UnixMilli()
+		r.ProvideSucceededAt = endTs.UnixMilli()
 		r.ProvideError = ""
 		return nil
 	})
@@ -141,7 +146,7 @@ func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, prov
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.ProvideAttemptCount++
 		provideAttemptCount = r.ProvideAttemptCount
-		if r.ProvideAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
+		if r.ProvideAttemptCount >= int32(w.maxRetry) {
 			r.ProvideError = provideErr.Error()
 		}
 		return nil
@@ -150,10 +155,13 @@ func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, prov
 		return err
 	}
 
-	if provideAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+	if provideAttemptCount < int32(w.maxRetry) {
 		return ErrProvideRetry
 	}
 
-	log.Log.Info("out of max retry", zap.String("cid", cid))
+	log.Log.Error(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "err"),
+		zap.Error(ErrOutOfMaxRetry))
 	return nil
 }

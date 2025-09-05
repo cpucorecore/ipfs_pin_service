@@ -8,7 +8,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
@@ -18,23 +17,26 @@ import (
 )
 
 type UnpinWorker struct {
-	store store.Store
-	queue mq.Queue
-	ipfs  *ipfs.Client
-	cfg   *config.Config
+	maxRetry int
+	timeout  time.Duration
+	store    store.Store
+	queue    mq.Queue
+	ipfs     *ipfs.Client
 }
 
 func NewUnpinWorker(
+	maxRetry int,
+	timeout time.Duration,
 	store store.Store,
 	queue mq.Queue,
 	ipfs *ipfs.Client,
-	cfg *config.Config,
 ) *UnpinWorker {
 	return &UnpinWorker{
-		store: store,
-		queue: queue,
-		ipfs:  ipfs,
-		cfg:   cfg,
+		maxRetry: maxRetry,
+		timeout:  timeout,
+		store:    store,
+		queue:    queue,
+		ipfs:     ipfs,
 	}
 }
 
@@ -72,8 +74,8 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 
 	ctxUnpin := ctx
 	var cancel context.CancelFunc
-	if w.cfg.Workers.UnpinTimeout > 0 {
-		ctxUnpin, cancel = context.WithTimeout(ctx, w.cfg.Workers.UnpinTimeout)
+	if w.timeout > 0 {
+		ctxUnpin, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
 
@@ -81,10 +83,10 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		zap.String("op", "unpin"),
 		zap.String("step", "ipfs start"))
 
-	unpinStartTime := time.Now()
+	startTs := time.Now()
 	err := w.ipfs.PinRm(ctxUnpin, cid)
-	unpinEndTime := time.Now()
-	duration := unpinEndTime.Sub(unpinStartTime)
+	endTs := time.Now()
+	duration := endTs.Sub(startTs)
 
 	if err == nil || IsDuplicateUnpinError(err, cid) {
 		log.Log.Info(cid,
@@ -92,7 +94,7 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 			zap.String("step", "end"),
 			zap.Duration("duration", duration))
 		monitor.ObserveOperation(monitor.OpPinRm, duration, nil)
-		return w.updateStoreUnpinSuccess(ctx, cid, unpinEndTime)
+		return w.updateStoreUnpinSuccess(ctx, cid, endTs)
 	}
 
 	return w.handleUnpinError(ctx, cid, err)
@@ -120,7 +122,7 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.UnpinAttemptCount++
 		unpinAttemptCount = r.UnpinAttemptCount
-		if r.UnpinAttemptCount >= int32(w.cfg.Workers.MaxRetries) {
+		if r.UnpinAttemptCount >= int32(w.maxRetry) {
 			r.Status = store.StatusDeadLetter
 		}
 		return nil
@@ -128,10 +130,13 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 		return err
 	}
 
-	if unpinAttemptCount < int32(w.cfg.Workers.MaxRetries) {
+	if unpinAttemptCount < int32(w.maxRetry) {
 		return ErrUnpinRetry
 	}
 
-	log.Log.Warn("out of max retry", zap.String("cid", cid))
+	log.Log.Error(cid,
+		zap.String("op", "unpin"),
+		zap.String("step", "err"),
+		zap.Error(ErrOutOfMaxRetry))
 	return nil
 }
