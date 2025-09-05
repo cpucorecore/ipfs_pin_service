@@ -61,7 +61,7 @@ func (w *UnpinWorker) handleMsg(ctx context.Context, body []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "unpin"),
+		zap.String("op", opUnpin),
 		zap.String("step", "start"))
 
 	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
@@ -80,7 +80,7 @@ func (w *UnpinWorker) handleMsg(ctx context.Context, body []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "unpin"),
+		zap.String("op", opUnpin),
 		zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
@@ -90,7 +90,7 @@ func (w *UnpinWorker) handleMsg(ctx context.Context, body []byte) error {
 
 	if err == nil || IsDuplicateUnpinError(err, cid) {
 		log.Log.Info(cid,
-			zap.String("op", "unpin"),
+			zap.String("op", opUnpin),
 			zap.String("step", "end"),
 			zap.Duration("duration", duration))
 		monitor.ObserveOperation(monitor.OpPinRm, duration, nil)
@@ -114,7 +114,7 @@ var (
 
 func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr error) error {
 	log.Log.Error(cid,
-		zap.String("op", "unpin"),
+		zap.String("op", opUnpin),
 		zap.String("step", "err"),
 		zap.Error(unpinErr))
 
@@ -135,7 +135,7 @@ func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr
 	}
 
 	log.Log.Error(cid,
-		zap.String("op", "unpin"),
+		zap.String("op", opUnpin),
 		zap.String("step", "err"),
 		zap.Error(ErrOutOfMaxRetry))
 	return nil

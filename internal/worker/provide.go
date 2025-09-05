@@ -77,7 +77,7 @@ func (w *ProvideWorker) handleMsg(ctx context.Context, body []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "provide"),
+		zap.String("op", opProvide),
 		zap.String("step", "start"))
 
 	pinRecord, err := w.store.Get(ctx, cid)
@@ -107,7 +107,7 @@ func (w *ProvideWorker) handleMsg(ctx context.Context, body []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "provide"),
+		zap.String("op", opProvide),
 		zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
@@ -120,7 +120,7 @@ func (w *ProvideWorker) handleMsg(ctx context.Context, body []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "provide"),
+		zap.String("op", opProvide),
 		zap.String("step", "ipfs end"),
 		zap.Duration("duration", duration))
 
@@ -141,7 +141,7 @@ var (
 
 func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, provideErr error) error {
 	log.Log.Error(cid,
-		zap.String("op", "provide"),
+		zap.String("op", opProvide),
 		zap.String("step", "err"),
 		zap.Error(provideErr))
 
@@ -163,7 +163,7 @@ func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, prov
 	}
 
 	log.Log.Error(cid,
-		zap.String("op", "provide"),
+		zap.String("op", opProvide),
 		zap.String("step", "err"),
 		zap.Error(ErrOutOfMaxRetry))
 	return nil

@@ -94,7 +94,7 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
@@ -103,7 +103,7 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 		defer cancel()
 	}
 	log.Log.Info(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
@@ -116,7 +116,7 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "ipfs end"),
 		zap.Duration("duration", duration))
 
@@ -142,12 +142,12 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 		log.Log.Error("enqueue provide queue err", zap.String("cid", cid), zap.Error(err))
 	} else {
 		log.Log.Info(cid,
-			zap.String("op", "pin"),
+			zap.String("op", opPin),
 			zap.String("step", "enqueue provide queue"))
 	}
 
 	log.Log.Info(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "end"),
 		zap.Int64("size", size),
 		zap.String("bucket", bucket))
@@ -162,7 +162,7 @@ var (
 
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error) error {
 	log.Log.Error(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "err"),
 		zap.Error(pinErr))
 
@@ -184,7 +184,7 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 	}
 
 	log.Log.Error(cid,
-		zap.String("op", "pin"),
+		zap.String("op", opPin),
 		zap.String("step", "err"),
 		zap.Error(ErrOutOfMaxRetry))
 	return nil
