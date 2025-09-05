@@ -74,9 +74,6 @@ func main() {
 	queueMonitor := worker.NewQueueMonitor(mq, cfg, shutdownMgr)
 	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg, shutdownMgr)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	shutdownMgr.Go(func() {
 		pinWorker.Start()
 	})
@@ -138,7 +135,6 @@ func main() {
 
 	shutdownMgr.StartDrain()
 
-	// Close RabbitMQ connection
 	log.Log.Sugar().Info("Closing RabbitMQ connection...")
 	if err = mq.Close(); err != nil {
 		log.Log.Sugar().Errorf("RabbitMQ close error: %v", err)
