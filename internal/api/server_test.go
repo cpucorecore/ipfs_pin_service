@@ -10,6 +10,7 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/log"
@@ -57,8 +58,31 @@ func (f *fakeStore) Close() error {
 
 type fakeMQ struct{ payloads [][]byte }
 
-func (q *fakeMQ) Enqueue(ctx context.Context, topic string, body []byte) error {
+func (q *fakeMQ) EnqueuePin(ctx context.Context, body []byte) error {
 	q.payloads = append(q.payloads, body)
+	return nil
+}
+
+func (q *fakeMQ) EnqueueUnpin(ctx context.Context, body []byte) error {
+	q.payloads = append(q.payloads, body)
+	return nil
+}
+
+func (q *fakeMQ) EnqueueProvide(ctx context.Context, body []byte) error {
+	q.payloads = append(q.payloads, body)
+	return nil
+}
+
+func (q *fakeMQ) DequeueConcurrent(ctx context.Context, queue string, concurrency int, handler mq.MsgHandler) error {
+	return nil
+}
+
+func (q *fakeMQ) Stats(ctx context.Context, queue string) (mq.Stats, error) {
+	var stats mq.Stats
+	return stats, nil
+}
+
+func (q *fakeMQ) Close() error {
 	return nil
 }
 

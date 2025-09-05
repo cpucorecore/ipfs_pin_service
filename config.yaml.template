@@ -20,24 +20,6 @@ filter:
 rabbitmq:
   url: "amqp://guest:guest@127.0.0.1:5672/"
   prefetch: 32
-  pin:
-    exchange: "pin.exchange"
-    queue: "pin.queue"
-    dlx: "pin.dlx"
-    retry_queue: "pin.retry.queue"
-    retry_delay: "1s"
-  unpin:
-    exchange: "unpin.exchange"
-    queue: "unpin.queue"
-    dlx: "unpin.dlx"
-    retry_queue: "unpin.retry.queue"
-    retry_delay: "1s"
-  provide:
-    exchange: "provide.exchange"
-    queue: "provide.queue"
-    dlx: "provide.dlx"
-    retry_queue: "provide.retry.queue"
-    retry_delay: "5s"
 
 workers:
   pin_concurrency: 8

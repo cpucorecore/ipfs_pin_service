@@ -2,14 +2,13 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/log"
@@ -17,14 +16,14 @@ import (
 
 type ProvideWorker struct {
 	store store.Store
-	queue queue.MessageQueue
+	queue mq.Queue
 	ipfs  *ipfs.Client
 	cfg   *config.Config
 }
 
 func NewProvideWorker(
 	store store.Store,
-	queue queue.MessageQueue,
+	queue mq.Queue,
 	ipfs *ipfs.Client,
 	cfg *config.Config,
 ) *ProvideWorker {
@@ -36,23 +35,17 @@ func NewProvideWorker(
 	}
 }
 
-func (w *ProvideWorker) Start(ctx context.Context) error {
-	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Provide.Queue, w.cfg.Workers.ProvideConcurrency, w.handleProvideMessage)
+func (w *ProvideWorker) Start() {
+	w.queue.StartProvideConsumer(w.handleProvideMessage)
 }
 
 func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) error {
-	var req ProvideRequestMsg
-	if err := json.Unmarshal(body, &req); err != nil {
-		log.Log.Sugar().Errorf("ProvideWorker parse request[%s] err: %v", string(body), err)
-		return err
-	}
+	cid := string(body)
 
-	if !util.CheckCid(req.Cid) {
-		log.Log.Sugar().Warnf("ProvideWorker check cid[%s] fail", req.Cid)
+	if !util.CheckCid(cid) {
+		log.Log.Sugar().Warnf("ProvideWorker check cid[%s] fail", cid)
 		return nil
 	}
-
-	cid := req.Cid
 
 	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {

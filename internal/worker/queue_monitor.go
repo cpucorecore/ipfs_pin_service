@@ -6,18 +6,18 @@ import (
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type QueueMonitor struct {
-	mq          queue.MessageQueue
+	mq          mq.Queue
 	cfg         *config.Config
 	shutdownMgr *shutdown.Manager
 }
 
-func NewQueueMonitor(mq queue.MessageQueue, cfg *config.Config, shutdownMgr *shutdown.Manager) *QueueMonitor {
+func NewQueueMonitor(mq mq.Queue, cfg *config.Config, shutdownMgr *shutdown.Manager) *QueueMonitor {
 	return &QueueMonitor{mq: mq, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
@@ -40,13 +40,13 @@ func (w *QueueMonitor) Start(ctx context.Context) error {
 }
 
 func (w *QueueMonitor) sample(ctx context.Context) {
-	if stats, err := w.mq.Stats(ctx, w.cfg.RabbitMQ.Pin.Queue); err == nil {
-		monitor.SetQueueStats(w.cfg.RabbitMQ.Pin.Queue, stats.Messages, stats.Consumers)
+	if stats, err := w.mq.Stats(mq.PinQueue); err == nil {
+		monitor.SetQueueStats(mq.PinQueue, stats.Messages, stats.Consumers)
 	}
-	if stats, err := w.mq.Stats(ctx, w.cfg.RabbitMQ.Unpin.Queue); err == nil {
-		monitor.SetQueueStats(w.cfg.RabbitMQ.Unpin.Queue, stats.Messages, stats.Consumers)
+	if stats, err := w.mq.Stats(mq.UnpinQueue); err == nil {
+		monitor.SetQueueStats(mq.UnpinQueue, stats.Messages, stats.Consumers)
 	}
-	if stats, err := w.mq.Stats(ctx, w.cfg.RabbitMQ.Provide.Queue); err == nil {
-		monitor.SetQueueStats(w.cfg.RabbitMQ.Provide.Queue, stats.Messages, stats.Consumers)
+	if stats, err := w.mq.Stats(mq.ProvideQueue); err == nil {
+		monitor.SetQueueStats(mq.ProvideQueue, stats.Messages, stats.Consumers)
 	}
 }

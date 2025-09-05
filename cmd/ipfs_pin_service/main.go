@@ -17,7 +17,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
@@ -50,7 +50,7 @@ func main() {
 	defer pebbleStore.Close()
 
 	shutdownMgr := shutdown.NewManager()
-	mq, err := queue.NewRabbitMQ(cfg, shutdownMgr)
+	mq, err := mq.NewGoRabbitMQ(cfg)
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create queue: %v", err)
 	}
@@ -73,25 +73,19 @@ func main() {
 	queueMonitor := worker.NewQueueMonitor(mq, cfg, shutdownMgr)
 	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg, shutdownMgr)
 
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	shutdownMgr.Go(func() {
-		if err = pinWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
-			log.Log.Sugar().Errorf("Pin worker stopped: %v", err)
-		}
+		pinWorker.Start()
 	})
 
 	shutdownMgr.Go(func() {
-		if err = unpinWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
-			log.Log.Sugar().Errorf("Unpin worker stopped: %v", err)
-		}
+		unpinWorker.Start(ctx)
 	})
 
 	shutdownMgr.Go(func() {
-		if err = provideWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
-			log.Log.Sugar().Errorf("Provide worker stopped: %v", err)
-		}
+		provideWorker.Start()
 	})
 
 	shutdownMgr.Go(func() {
@@ -142,6 +136,12 @@ func main() {
 	log.Log.Sugar().Info("Received shutdown signal, entering drain mode...")
 
 	shutdownMgr.StartDrain()
+
+	// Close RabbitMQ connection
+	log.Log.Sugar().Info("Closing RabbitMQ connection...")
+	if err = mq.Close(); err != nil {
+		log.Log.Sugar().Errorf("RabbitMQ close error: %v", err)
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()

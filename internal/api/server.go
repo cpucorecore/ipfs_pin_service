@@ -1,13 +1,13 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
@@ -18,16 +18,12 @@ import (
 
 type Server struct {
 	store       store.Store
-	queue       MessageQueue
+	queue       mq.Queue
 	sizeFilter  *filter.SizeFilter
 	shutdownMgr *shutdown.Manager
 }
 
-type MessageQueue interface {
-	Enqueue(ctx context.Context, topic string, body []byte) error
-}
-
-func NewServer(store store.Store, queue MessageQueue, sizeFilter *filter.SizeFilter, shutdownMgr *shutdown.Manager) *Server {
+func NewServer(store store.Store, queue mq.Queue, sizeFilter *filter.SizeFilter, shutdownMgr *shutdown.Manager) *Server {
 	return &Server{
 		store:       store,
 		queue:       queue,
@@ -120,7 +116,8 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	}
 
 	body, _ := json.Marshal(gin.H{"cid": cidStr, "size": pinRecord.Size})
-	if err = s.queue.Enqueue(c, "pin.exchange", body); err != nil {
+	err = s.queue.EnqueuePin(body)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

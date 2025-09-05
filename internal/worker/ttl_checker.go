@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/log"
@@ -13,12 +13,12 @@ import (
 
 type TTLChecker struct {
 	store       store.Store
-	queue       queue.MessageQueue
+	queue       mq.Queue
 	cfg         *config.Config
 	shutdownMgr *shutdown.Manager
 }
 
-func NewTTLChecker(store store.Store, queue queue.MessageQueue, cfg *config.Config, shutdownMgr *shutdown.Manager) *TTLChecker {
+func NewTTLChecker(store store.Store, queue mq.Queue, cfg *config.Config, shutdownMgr *shutdown.Manager) *TTLChecker {
 	return &TTLChecker{store: store, queue: queue, cfg: cfg, shutdownMgr: shutdownMgr}
 }
 
@@ -74,7 +74,7 @@ func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error 
 
 		log.Log.Sugar().Infof("unpin[%s] with status[%d], expireAt[%d]", cid, pinRecord.Status, pinRecord.ExpireAt)
 
-		err = c.queue.Enqueue(ctx, "unpin.exchange", []byte(cid))
+		err = c.queue.EnqueueUnpin([]byte(cid))
 		if err != nil {
 			log.Log.Sugar().Errorf("queue.Enqueue(%s) err: %v", cid, err)
 			continue

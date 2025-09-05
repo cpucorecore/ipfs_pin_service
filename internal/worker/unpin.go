@@ -9,7 +9,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/log"
@@ -17,14 +17,14 @@ import (
 
 type UnpinWorker struct {
 	store store.Store
-	queue queue.MessageQueue
+	queue mq.Queue
 	ipfs  *ipfs.Client
 	cfg   *config.Config
 }
 
 func NewUnpinWorker(
 	store store.Store,
-	queue queue.MessageQueue,
+	queue mq.Queue,
 	ipfs *ipfs.Client,
 	cfg *config.Config,
 ) *UnpinWorker {
@@ -36,8 +36,8 @@ func NewUnpinWorker(
 	}
 }
 
-func (w *UnpinWorker) Start(ctx context.Context) error {
-	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Unpin.Queue, w.cfg.Workers.UnpinConcurrency, w.handleMessage)
+func (w *UnpinWorker) Start(ctx context.Context) {
+	w.queue.StartUnpinConsumer(w.handleMessage)
 }
 
 func IsDuplicateUnpinError(err error, cid string) bool {

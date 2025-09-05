@@ -34,10 +34,12 @@ func TestProvideWorker(t *testing.T) {
 	assert.Equal(t, cfg, worker.cfg)
 }
 
-func TestProvideRequestMsg(t *testing.T) {
-	msg := ProvideRequestMsg{
-		Cid: "QmTest123",
-	}
+func TestProvideWorker_MessageFormat(t *testing.T) {
+	// 测试直接使用cid字符串的消息格式
+	testCid := "QmTest123"
+	body := []byte(testCid)
 
-	assert.Equal(t, "QmTest123", msg.Cid)
+	// 验证消息内容
+	assert.Equal(t, testCid, string(body))
+	assert.Equal(t, []byte(testCid), body)
 }

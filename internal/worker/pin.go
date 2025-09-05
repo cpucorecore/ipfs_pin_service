@@ -9,7 +9,7 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
-	"github.com/cpucorecore/ipfs_pin_service/internal/queue"
+	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
@@ -18,7 +18,7 @@ import (
 
 type PinWorker struct {
 	store  store.Store
-	queue  queue.MessageQueue
+	queue  mq.Queue
 	ipfs   *ipfs.Client
 	policy *ttl.Policy
 	cfg    *config.Config
@@ -26,7 +26,7 @@ type PinWorker struct {
 
 func NewPinWorker(
 	store store.Store,
-	queue queue.MessageQueue,
+	queue mq.Queue,
 	ipfs *ipfs.Client,
 	policy *ttl.Policy,
 	cfg *config.Config,
@@ -40,17 +40,13 @@ func NewPinWorker(
 	}
 }
 
-func (w *PinWorker) Start(ctx context.Context) error {
-	return w.queue.DequeueConcurrent(ctx, w.cfg.RabbitMQ.Pin.Queue, w.cfg.Workers.PinConcurrency, w.handlePinMessage)
-}
-
 type PinRequestMsg struct {
 	Cid  string `json:"cid"`
 	Size int64  `json:"size"`
 }
 
-type ProvideRequestMsg struct {
-	Cid string `json:"cid"`
+func (w *PinWorker) Start() {
+	w.queue.StartPinConsumer(w.handlePinMessage)
 }
 
 func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
@@ -126,17 +122,12 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	provideMsg := ProvideRequestMsg{Cid: cid}
-	provideBody, err := json.Marshal(provideMsg)
+	provideBody := []byte(cid)
+	err = w.queue.EnqueueProvide(provideBody)
 	if err != nil {
-		log.Log.Sugar().Errorf("Pin[%s] marshal provide message err: %v", cid, err)
+		log.Log.Sugar().Errorf("Pin[%s] enqueue provide err: %v", cid, err)
 	} else {
-		err = w.queue.Enqueue(ctx, w.cfg.RabbitMQ.Provide.Exchange, provideBody)
-		if err != nil {
-			log.Log.Sugar().Errorf("Pin[%s] enqueue provide err: %v", cid, err)
-		} else {
-			log.Log.Sugar().Infof("Pin[%s] enqueued provide request", cid)
-		}
+		log.Log.Sugar().Infof("Pin[%s] enqueued provide request", cid)
 	}
 
 	log.Log.Sugar().Infof("Pin[%s] done", cid)

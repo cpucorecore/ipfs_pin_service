@@ -7,20 +7,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type QueueConf struct {
-	Exchange   string        `yaml:"exchange"`
-	Queue      string        `yaml:"queue"`
-	DLX        string        `yaml:"dlx"`
-	RetryQueue string        `yaml:"retry_queue"`
-	RetryDelay time.Duration `yaml:"retry_delay"`
-}
-
 type RabbitMQConf struct {
-	URL      string    `yaml:"url"`
-	Prefetch int       `yaml:"prefetch"`
-	Pin      QueueConf `yaml:"pin"`
-	Unpin    QueueConf `yaml:"unpin"`
-	Provide  QueueConf `yaml:"provide"`
+	URL      string `yaml:"url"`
+	Prefetch int    `yaml:"prefetch"`
 }
 
 type Config struct {
