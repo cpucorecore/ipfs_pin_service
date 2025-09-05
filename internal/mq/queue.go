@@ -20,11 +20,6 @@ const (
 
 type MsgHandler func(ctx context.Context, body []byte) error
 
-type Stats struct {
-	Messages  int64
-	Consumers int64
-}
-
 type Queue interface {
 	EnqueuePin(data []byte) error
 	EnqueueUnpin(data []byte) error
@@ -32,6 +27,6 @@ type Queue interface {
 	StartPinConsumer(handler MsgHandler)
 	StartUnpinConsumer(handler MsgHandler)
 	StartProvideConsumer(handler MsgHandler)
-	Stats(queue string) (Stats, error)
+	Stats(queue string) (int, int, error)
 	Close() error
 }

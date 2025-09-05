@@ -34,19 +34,23 @@ func (w *QueueMonitor) Start(ctx context.Context) error {
 				log.Log.Sugar().Info("Queue monitor stopping due to drain mode")
 				return nil
 			}
-			w.sample(ctx)
+			w.sample()
 		}
 	}
 }
 
-func (w *QueueMonitor) sample(ctx context.Context) {
-	if stats, err := w.mq.Stats(mq.PinQueue); err == nil {
-		monitor.SetQueueStats(mq.PinQueue, stats.Messages, stats.Consumers)
+func (w *QueueMonitor) sample() {
+	var messages, consumers int
+	var err error
+
+	if messages, consumers, err = w.mq.Stats(mq.PinQueue); err == nil {
+		monitor.SetQueueStats(mq.PinQueue, messages, consumers)
 	}
-	if stats, err := w.mq.Stats(mq.UnpinQueue); err == nil {
-		monitor.SetQueueStats(mq.UnpinQueue, stats.Messages, stats.Consumers)
+
+	if messages, consumers, err = w.mq.Stats(mq.UnpinQueue); err == nil {
+		monitor.SetQueueStats(mq.UnpinQueue, messages, consumers)
 	}
-	if stats, err := w.mq.Stats(mq.ProvideQueue); err == nil {
-		monitor.SetQueueStats(mq.ProvideQueue, stats.Messages, stats.Consumers)
+	if messages, consumers, err = w.mq.Stats(mq.ProvideQueue); err == nil {
+		monitor.SetQueueStats(mq.ProvideQueue, messages, consumers)
 	}
 }

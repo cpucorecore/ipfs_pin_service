@@ -151,7 +151,7 @@ func RegisterHandles(r *gin.Engine) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-func SetQueueStats(queueName string, messages, consumers int64) {
+func SetQueueStats(queueName string, messages, consumers int) {
 	queueMessages.WithLabelValues(queueName).Set(float64(messages))
 	queueConsumers.WithLabelValues(queueName).Set(float64(consumers))
 }

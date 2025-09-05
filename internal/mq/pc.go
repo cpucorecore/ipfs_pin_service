@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/wagslane/go-rabbitmq"
 	"go.uber.org/zap"
@@ -49,6 +50,7 @@ func NewPC(conn *rabbitmq.Conn, cfg *PCConfig) *PC {
 		rabbitmq.WithPublisherOptionsLogging,
 		rabbitmq.WithPublisherOptionsExchangeName(cfg.Exchange),
 		rabbitmq.WithPublisherOptionsExchangeKind("direct"),
+		rabbitmq.WithPublisherOptionsExchangeDurable,
 		rabbitmq.WithPublisherOptionsExchangeDeclare,
 	)
 	if err != nil {
@@ -64,7 +66,9 @@ func NewPC(conn *rabbitmq.Conn, cfg *PCConfig) *PC {
 		rabbitmq.WithConsumerOptionsRoutingKey(cfg.RoutingKey),
 		rabbitmq.WithConsumerOptionsExchangeName(cfg.Exchange),
 		rabbitmq.WithConsumerOptionsExchangeKind("direct"),
+		rabbitmq.WithConsumerOptionsExchangeDurable,
 		rabbitmq.WithConsumerOptionsExchangeDeclare,
+		rabbitmq.WithConsumerOptionsQueueDurable,
 	)
 
 	pc := &PC{

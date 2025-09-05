@@ -11,6 +11,7 @@ import (
 
 type GoRabbitMQ struct {
 	config    *config.Config
+	amqpCli   *AMQPClient
 	conn      *rabbitmq.Conn
 	pinPC     *PC
 	unpinPC   *PC
@@ -18,6 +19,8 @@ type GoRabbitMQ struct {
 }
 
 func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
+	amqpCli := NewAMQPClient(cfg.RabbitMQ.URL)
+
 	conn, err := rabbitmq.NewConn(
 		cfg.RabbitMQ.URL,
 		rabbitmq.WithConnectionOptionsLogging,
@@ -53,6 +56,7 @@ func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
 
 	return &GoRabbitMQ{
 		config:    cfg,
+		amqpCli:   amqpCli,
 		conn:      conn,
 		pinPC:     pinPC,
 		unpinPC:   unpinPC,
@@ -84,11 +88,12 @@ func (g *GoRabbitMQ) StartProvideConsumer(handler MsgHandler) {
 	g.providePC.StartConsume(context.Background(), handler)
 }
 
-func (g *GoRabbitMQ) Stats(queue string) (Stats, error) {
-	return Stats{}, nil
+func (g *GoRabbitMQ) Stats(queue string) (int, int, error) {
+	return g.amqpCli.QueryQueueStat(queue)
 }
 
 func (g *GoRabbitMQ) Close() error {
+	g.amqpCli.Close()
 	g.pinPC.Close()
 	g.unpinPC.Close()
 	g.providePC.Close()
