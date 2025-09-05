@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
@@ -72,7 +74,9 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		return w.handleProvideError(ctx, cid, err)
 	}
 
-	log.Log.Sugar().Infof("Provide[%s] start", cid)
+	log.Log.Info(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
 	if w.cfg.Workers.ProvideTimeout > 0 {
@@ -80,26 +84,36 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		defer cancel()
 	}
 
+	log.Log.Info(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "ipfs start"))
+
 	provideStartTime := time.Now()
 
 	var opType string
+	var mode string
 	if w.cfg.Workers.ProvideRecursive {
 		err = w.ipfs.ProvideRecursive(timeoutCtx, cid)
 		opType = monitor.OpProvideRecursive
-		log.Log.Sugar().Infof("Provide[%s] using recursive mode", cid)
+		mode = "recursive"
 	} else {
 		err = w.ipfs.Provide(timeoutCtx, cid)
 		opType = monitor.OpProvide
-		log.Log.Sugar().Infof("Provide[%s] using non-recursive mode", cid)
+		mode = "non-recursive"
 	}
 	provideEndTime := time.Now()
+	duration := provideEndTime.Sub(provideStartTime)
+
+	log.Log.Info(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "ipfs end"),
+		zap.String("mode", mode),
+		zap.Duration("duration", duration))
+
 	if err != nil {
 		return w.handleProvideError(ctx, cid, err)
 	}
-	duration := provideEndTime.Sub(provideStartTime)
 	monitor.ObserveOperation(opType, duration, err)
-
-	log.Log.Sugar().Infof("Provide[%s] ipfs done: %s", cid, duration)
 
 	err = w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.ProvideSucceededAt = provideEndTime.UnixMilli()
@@ -110,7 +124,6 @@ func (w *ProvideWorker) handleProvideMessage(ctx context.Context, body []byte) e
 		return w.handleProvideError(ctx, cid, err)
 	}
 
-	log.Log.Sugar().Infof("Provide[%s] done", cid)
 	return nil
 }
 
@@ -119,7 +132,10 @@ var (
 )
 
 func (w *ProvideWorker) handleProvideError(ctx context.Context, cid string, provideErr error) error {
-	log.Log.Sugar().Errorf("Provide[%s] err: %v", cid, provideErr)
+	log.Log.Error(cid,
+		zap.String("op", "provide"),
+		zap.String("step", "err"),
+		zap.Error(provideErr))
 
 	var provideAttemptCount int32
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {

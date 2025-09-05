@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
@@ -88,22 +90,33 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	log.Log.Sugar().Infof("Pin[%s] start", cid)
+	log.Log.Info(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
 	if w.cfg.Workers.PinTimeout > 0 {
 		timeoutCtx, cancel = context.WithTimeout(ctx, w.cfg.Workers.PinTimeout)
 		defer cancel()
 	}
+	log.Log.Info(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "ipfs start"))
+
 	pinStartTime := time.Now()
 	err = w.ipfs.PinAdd(timeoutCtx, cid)
 	pinEndTime := time.Now()
+	duration := pinEndTime.Sub(pinStartTime)
+
+	log.Log.Info(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "ipfs end"),
+		zap.Duration("duration", duration))
+
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
 	}
-	duration := pinEndTime.Sub(pinStartTime)
 	monitor.ObserveOperation(monitor.OpPinAdd, duration, err)
-	log.Log.Sugar().Infof("Pin[%s] ipfs done: %s", cid, duration)
 
 	ttl, bucket := w.policy.ComputeTTL(pinRecord.Size)
 	expireAt := pinEndTime.Add(ttl).UnixMilli()
@@ -127,10 +140,16 @@ func (w *PinWorker) handlePinMessage(ctx context.Context, body []byte) error {
 	if err != nil {
 		log.Log.Sugar().Errorf("Pin[%s] enqueue provide err: %v", cid, err)
 	} else {
-		log.Log.Sugar().Infof("Pin[%s] enqueued provide request", cid)
+		log.Log.Info(cid,
+			zap.String("op", "pin"),
+			zap.String("step", "enqueue provide queue"))
 	}
 
-	log.Log.Sugar().Infof("Pin[%s] done", cid)
+	log.Log.Info(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "end"),
+		zap.Int64("file_size", pinRecord.Size),
+		zap.String("ttl_bucket", bucket))
 	monitor.ObserveFileSize(pinRecord.Size)
 	monitor.ObserveTTLBucket(bucket)
 	return nil
@@ -141,7 +160,10 @@ var (
 )
 
 func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error) error {
-	log.Log.Sugar().Errorf("Pin[%s] err: %v", cid, pinErr)
+	log.Log.Error(cid,
+		zap.String("op", "pin"),
+		zap.String("step", "err"),
+		zap.Error(pinErr))
 
 	var pinAttemptCount int32
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {

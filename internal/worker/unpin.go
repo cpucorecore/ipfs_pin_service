@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
@@ -50,7 +52,9 @@ func IsDuplicateUnpinError(err error, cid string) bool {
 
 func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 	cid := string(body)
-	log.Log.Sugar().Infof("Unpin[%s] start", cid)
+	log.Log.Info(cid,
+		zap.String("op", "unpin"),
+		zap.String("step", "start"))
 
 	if !util.CheckCid(cid) {
 		log.Log.Sugar().Warnf("Unpin[%s] wrong cid", cid)
@@ -73,12 +77,20 @@ func (w *UnpinWorker) handleMessage(ctx context.Context, body []byte) error {
 		defer cancel()
 	}
 
+	log.Log.Info(cid,
+		zap.String("op", "unpin"),
+		zap.String("step", "ipfs start"))
+
 	unpinStartTime := time.Now()
 	err := w.ipfs.PinRm(ctxUnpin, cid)
 	unpinEndTime := time.Now()
 	duration := unpinEndTime.Sub(unpinStartTime)
+
 	if err == nil || IsDuplicateUnpinError(err, cid) {
-		log.Log.Sugar().Infof("Unpin[%s] finish in %s", cid, duration)
+		log.Log.Info(cid,
+			zap.String("op", "unpin"),
+			zap.String("step", "end"),
+			zap.Duration("duration", duration))
 		monitor.ObserveOperation(monitor.OpPinRm, duration, nil)
 		return w.updateStoreUnpinSuccess(ctx, cid, unpinEndTime)
 	}
@@ -99,7 +111,10 @@ var (
 )
 
 func (w *UnpinWorker) handleUnpinError(ctx context.Context, cid string, unpinErr error) error {
-	log.Log.Sugar().Errorf("Unpin[%s] fail with err: %v", cid, unpinErr)
+	log.Log.Error(cid,
+		zap.String("op", "unpin"),
+		zap.String("step", "err"),
+		zap.Error(unpinErr))
 
 	var unpinAttemptCount int32
 	if err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
