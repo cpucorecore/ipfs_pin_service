@@ -8,10 +8,14 @@ import (
 
 func TestClonePinRecord(t *testing.T) {
 	original := &PinRecord{
-		Cid:        "test-cid",
-		Status:     StatusActive,
-		ReceivedAt: time.Now().UnixMilli(),
-		Size:       1024,
+		Cid:                 "test-cid",
+		Status:              StatusActive,
+		ReceivedAt:          time.Now().UnixMilli(),
+		Size:                1024,
+		ProvideStartAt:      111,
+		ProvideSucceededAt:  222,
+		ProvideAttemptCount: 3,
+		ProvideError:        "some error",
 		History: []*PinRecord{
 			{Cid: "history-1", Status: StatusUnpinSucceeded},
 		},
@@ -19,7 +23,7 @@ func TestClonePinRecord(t *testing.T) {
 
 	cloned, history := ClonePinRecord(original)
 
-	// 验证基本字段被正确复制
+	// Verify basic fields copied
 	if cloned.Cid != original.Cid {
 		t.Errorf("expected Cid %s, got %s", original.Cid, cloned.Cid)
 	}
@@ -30,12 +34,26 @@ func TestClonePinRecord(t *testing.T) {
 		t.Errorf("expected Size %d, got %d", original.Size, cloned.Size)
 	}
 
-	// 验证History字段没有被复制（避免递归）
+	// Verify provide-related fields copied
+	if cloned.ProvideStartAt != original.ProvideStartAt {
+		t.Errorf("expected ProvideStartAt %d, got %d", original.ProvideStartAt, cloned.ProvideStartAt)
+	}
+	if cloned.ProvideSucceededAt != original.ProvideSucceededAt {
+		t.Errorf("expected ProvideSucceededAt %d, got %d", original.ProvideSucceededAt, cloned.ProvideSucceededAt)
+	}
+	if cloned.ProvideAttemptCount != original.ProvideAttemptCount {
+		t.Errorf("expected ProvideAttemptCount %d, got %d", original.ProvideAttemptCount, cloned.ProvideAttemptCount)
+	}
+	if cloned.ProvideError != original.ProvideError {
+		t.Errorf("expected ProvideError %q, got %q", original.ProvideError, cloned.ProvideError)
+	}
+
+	// Verify History not copied (avoid recursion)
 	if cloned.History != nil {
 		t.Errorf("expected History to be nil, got %v", cloned.History)
 	}
 
-	// 验证返回的history切片
+	// Verify returned history slice
 	if len(history) != 1 {
 		t.Errorf("expected 1 history record, got %d", len(history))
 	}
@@ -46,10 +64,14 @@ func TestClonePinRecord(t *testing.T) {
 
 func TestResetPinRecordDynamicState(t *testing.T) {
 	rec := &PinRecord{
-		Cid:        "test-cid",
-		Status:     StatusActive,
-		ReceivedAt: time.Now().UnixMilli(),
-		Size:       1024,
+		Cid:                 "test-cid",
+		Status:              StatusActive,
+		ReceivedAt:          time.Now().UnixMilli(),
+		Size:                1024,
+		ProvideStartAt:      111,
+		ProvideSucceededAt:  222,
+		ProvideAttemptCount: 3,
+		ProvideError:        "some error",
 		History: []*PinRecord{
 			{Cid: "history-1", Status: StatusUnpinSucceeded},
 		},
@@ -57,7 +79,7 @@ func TestResetPinRecordDynamicState(t *testing.T) {
 
 	ResetPinRecordDynamicState(rec, 2)
 
-	// 验证动态状态被重置
+	// Verify dynamic fields reset
 	if rec.Status != StatusUnknown {
 		t.Errorf("expected Status %d, got %d", StatusUnknown, rec.Status)
 	}
@@ -68,7 +90,21 @@ func TestResetPinRecordDynamicState(t *testing.T) {
 		t.Errorf("expected Size to remain 1024, got %d", rec.Size)
 	}
 
-	// 验证History字段被重新初始化
+	// Verify provide-related fields cleared
+	if rec.ProvideStartAt != 0 {
+		t.Errorf("expected ProvideStartAt 0, got %d", rec.ProvideStartAt)
+	}
+	if rec.ProvideSucceededAt != 0 {
+		t.Errorf("expected ProvideSucceededAt 0, got %d", rec.ProvideSucceededAt)
+	}
+	if rec.ProvideAttemptCount != 0 {
+		t.Errorf("expected ProvideAttemptCount 0, got %d", rec.ProvideAttemptCount)
+	}
+	if rec.ProvideError != "" {
+		t.Errorf("expected ProvideError empty, got %q", rec.ProvideError)
+	}
+
+	// Verify History reinitialized
 	if rec.History == nil {
 		t.Errorf("expected History to be initialized, got nil")
 	}
@@ -81,16 +117,16 @@ func TestResetPinRecordDynamicState(t *testing.T) {
 }
 
 func TestAppendHistory(t *testing.T) {
-	// 模拟实际场景：开始时没有历史记录
+	// Simulate: no history initially
 	rec := &PinRecord{Cid: "test-cid"}
 
-	// 第一次：模拟记录从未被处理过，第一次被标记为UnpinSucceeded
+	// First: record marked UnpinSucceeded for the first time
 	rec.Status = StatusUnpinSucceeded
 	rec.ReceivedAt = 1000
 	rec.LastUpdateAt = 2000
 
-	// 第二次：模拟API场景 - 记录从UnpinSucceeded状态重新开始
-	// 直接使用API中的组合：ClonePinRecord -> ResetPinRecordDynamicState -> AppendHistory
+	// Second: API flow restart from UnpinSucceeded
+	// Use combination: ClonePinRecord -> ResetPinRecordDynamicState -> AppendHistory
 	lastPinRecord, history := ClonePinRecord(rec)
 	ResetPinRecordDynamicState(rec, 1+len(history))
 	rec.Status = StatusReceived
@@ -100,7 +136,7 @@ func TestAppendHistory(t *testing.T) {
 	if len(rec.History) != 1 {
 		t.Errorf("expected 1 history record, got %d", len(rec.History))
 	}
-	// 验证历史记录按时间顺序排列：最旧的在前，最新的在后
+	// Verify history in chronological order (oldest first)
 	if rec.History[0].Status != StatusUnpinSucceeded {
 		t.Errorf("expected history[0] Status %d, got %d", StatusUnpinSucceeded, rec.History[0].Status)
 	}
@@ -108,7 +144,7 @@ func TestAppendHistory(t *testing.T) {
 		t.Errorf("expected history[0] LastUpdateAt 2000, got %d", rec.History[0].LastUpdateAt)
 	}
 
-	// 第三次：模拟API场景 - 记录从DeadLetter状态重新开始
+	// Third: restart from DeadLetter
 	rec.Status = StatusDeadLetter
 	rec.ReceivedAt = 4000
 	rec.LastUpdateAt = 5000
@@ -122,7 +158,7 @@ func TestAppendHistory(t *testing.T) {
 	if len(rec.History) != 2 {
 		t.Errorf("expected 2 history records, got %d", len(rec.History))
 	}
-	// 验证历史记录按时间顺序排列
+	// Verify order
 	if rec.History[0].Status != StatusUnpinSucceeded {
 		t.Errorf("expected history[0] Status %d, got %d", StatusUnpinSucceeded, rec.History[0].Status)
 	}
@@ -136,7 +172,7 @@ func TestAppendHistory(t *testing.T) {
 		t.Errorf("expected history[1] LastUpdateAt 5000, got %d", rec.History[1].LastUpdateAt)
 	}
 
-	// 第四次：模拟API场景 - 记录再次重新开始
+	// Fourth: restart again
 	rec.Status = StatusFiltered
 	rec.ReceivedAt = 7000
 	rec.LastUpdateAt = 8000
@@ -150,7 +186,7 @@ func TestAppendHistory(t *testing.T) {
 	if len(rec.History) != 3 {
 		t.Errorf("expected 3 history records, got %d", len(rec.History))
 	}
-	// 验证历史记录按时间顺序排列
+	// Verify order
 	if rec.History[0].Status != StatusUnpinSucceeded {
 		t.Errorf("expected history[0] Status %d, got %d", StatusUnpinSucceeded, rec.History[0].Status)
 	}
@@ -174,7 +210,7 @@ func TestAppendHistory(t *testing.T) {
 func TestAppendHistoryWithMultipleRecords(t *testing.T) {
 	rec := &PinRecord{Cid: "test-cid"}
 
-	// 测试添加多个历史记录
+	// Test append multiple history entries
 	for i := 0; i < 5; i++ {
 		history := &PinRecord{
 			Cid:    fmt.Sprintf("history-%d", i),
@@ -183,12 +219,12 @@ func TestAppendHistoryWithMultipleRecords(t *testing.T) {
 		AppendHistory(rec, history, nil)
 	}
 
-	// 验证历史记录数量
+	// Verify count
 	if len(rec.History) != 5 {
 		t.Errorf("expected 5 history records, got %d", len(rec.History))
 	}
 
-	// 验证历史记录顺序（按时间顺序：最旧的在前，最新的在后）
+	// Verify order (oldest first)
 	for i := 0; i < 5; i++ {
 		expectedCid := fmt.Sprintf("history-%d", i)
 		if rec.History[i].Cid != expectedCid {

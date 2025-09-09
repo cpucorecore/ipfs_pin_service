@@ -22,32 +22,32 @@ func TestComputeBuckets(t *testing.T) {
 
 	buckets := computeBuckets(cfg)
 
-	// 测试bucket数量
+	// Verify bucket count
 	if len(buckets) != 3 {
-		t.Errorf("期望3个bucket，实际得到 %d 个", len(buckets))
+		t.Errorf("expected 3 buckets, got %d", len(buckets))
 	}
 
-	// 测试排序是否正确（应该按MaxSize升序排列）
+	// Verify sorting by MaxSize ascending
 	expectedSizes := []int64{1024, 1024 * 1024, math.MaxInt64}
 	for i, bucket := range buckets {
 		if bucket.MaxSize != expectedSizes[i] {
-			t.Errorf("Bucket %d: 期望MaxSize %d，实际得到 %d", i, expectedSizes[i], bucket.MaxSize)
+			t.Errorf("Bucket %d: expected MaxSize %d, got %d", i, expectedSizes[i], bucket.MaxSize)
 		}
 	}
 
-	// 测试标签是否正确计算
+	// Verify labels computed correctly
 	expectedLabels := []string{"le_1KiB", "le_1MiB", "gt_max"}
 	for i, bucket := range buckets {
 		if bucket.Label != expectedLabels[i] {
-			t.Errorf("Bucket %d: 期望标签 %s，实际得到 %s", i, expectedLabels[i], bucket.Label)
+			t.Errorf("Bucket %d: expected label %s, got %s", i, expectedLabels[i], bucket.Label)
 		}
 	}
 
-	// 测试TTL是否正确设置
+	// Verify TTLs
 	expectedTTLs := []time.Duration{1 * time.Hour, 6 * time.Hour, 24 * time.Hour}
 	for i, bucket := range buckets {
 		if bucket.TTL != expectedTTLs[i] {
-			t.Errorf("Bucket %d: 期望TTL %v，实际得到 %v", i, expectedTTLs[i], bucket.TTL)
+			t.Errorf("Bucket %d: expected TTL %v, got %v", i, expectedTTLs[i], bucket.TTL)
 		}
 	}
 }

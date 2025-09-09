@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
@@ -13,12 +12,11 @@ import (
 
 type QueueMonitor struct {
 	mq          mq.Queue
-	cfg         *config.Config
 	shutdownMgr *shutdown.Manager
 }
 
-func NewQueueMonitor(mq mq.Queue, cfg *config.Config, shutdownMgr *shutdown.Manager) *QueueMonitor {
-	return &QueueMonitor{mq: mq, cfg: cfg, shutdownMgr: shutdownMgr}
+func NewQueueMonitor(mq mq.Queue, shutdownMgr *shutdown.Manager) *QueueMonitor {
+	return &QueueMonitor{mq: mq, shutdownMgr: shutdownMgr}
 }
 
 func (w *QueueMonitor) Start(ctx context.Context) error {

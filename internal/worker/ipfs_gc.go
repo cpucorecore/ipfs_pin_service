@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
@@ -12,25 +11,25 @@ import (
 )
 
 type GCWorker struct {
+	interval    time.Duration
 	ipfs        *ipfs.Client
-	cfg         *config.Config
 	shutdownMgr *shutdown.Manager
 }
 
 func NewGCWorker(
+	interval time.Duration,
 	ipfs *ipfs.Client,
-	cfg *config.Config,
 	shutdownMgr *shutdown.Manager,
 ) *GCWorker {
 	return &GCWorker{
+		interval:    interval,
 		ipfs:        ipfs,
-		cfg:         cfg,
 		shutdownMgr: shutdownMgr,
 	}
 }
 
 func (w *GCWorker) Start(ctx context.Context) error {
-	ticker := time.NewTicker(w.cfg.GC.Interval)
+	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
 	for {

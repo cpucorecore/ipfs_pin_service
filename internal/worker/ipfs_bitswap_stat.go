@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
@@ -13,12 +12,14 @@ import (
 
 type BitswapStatWorker struct {
 	ipfs        *ipfs.Client
-	cfg         *config.Config
 	shutdownMgr *shutdown.Manager
 }
 
-func NewBitswapStatWorker(ipfs *ipfs.Client, cfg *config.Config, shutdownMgr *shutdown.Manager) *BitswapStatWorker {
-	return &BitswapStatWorker{ipfs: ipfs, cfg: cfg, shutdownMgr: shutdownMgr}
+func NewBitswapStatWorker(ipfs *ipfs.Client, shutdownMgr *shutdown.Manager) *BitswapStatWorker {
+	return &BitswapStatWorker{
+		ipfs:        ipfs,
+		shutdownMgr: shutdownMgr,
+	}
 }
 
 func (w *BitswapStatWorker) Start(ctx context.Context) error {

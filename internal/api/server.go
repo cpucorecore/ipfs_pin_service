@@ -3,11 +3,11 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
+	reqprecheck "github.com/cpucorecore/ipfs_pin_service/internal/req_pre_check"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/util"
@@ -47,30 +47,15 @@ func (s *Server) handlePutPin(c *gin.Context) {
 		return
 	}
 
-	cid := c.Param("cid")
-	if cid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cid"})
+	err, cid, size := reqprecheck.CheckHttpReq(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	}
-
-	if !util.CheckCid(cid) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cid"})
-		return
-	}
-
-	sizeStr := c.Query("size")
-	var size int64
-	if sizeStr != "" {
-		var err error
-		size, err = strconv.ParseInt(sizeStr, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid size parameter"})
-			return
-		}
 	}
 
 	pinRecord, err := s.store.Get(c, cid)
 	if err != nil {
+		log.Log.Error("get pin record err", zap.String("cid", cid), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -119,6 +104,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	body, _ := json.Marshal(gin.H{"cid": cid, "size": pinRecord.Size})
 	err = s.queue.EnqueuePin(body)
 	if err != nil {
+		log.Log.Error("enqueue pin err", zap.String("msg", string(body)), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -126,6 +112,7 @@ func (s *Server) handlePutPin(c *gin.Context) {
 	pinRecord.Status = store.StatusEnqueued
 	pinRecord.EnqueuedAt = time.Now().UnixMilli()
 	if err = s.store.Put(c, pinRecord); err != nil {
+		log.Log.Error("store.Put pinRecord err", zap.String("cid", cid), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

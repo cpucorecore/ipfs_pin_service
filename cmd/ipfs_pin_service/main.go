@@ -68,11 +68,11 @@ func main() {
 	pinWorker := worker.NewPinWorker(cfg.Workers.MaxRetries, cfg.Workers.PinTimeout, pebbleStore, mq, ipfsClient, policy)
 	unpinWorker := worker.NewUnpinWorker(cfg.Workers.MaxRetries, cfg.Workers.UnpinTimeout, pebbleStore, mq, ipfsClient)
 	provideWorker := worker.NewProvideWorker(cfg.Workers.MaxRetries, cfg.Workers.ProvideTimeout, cfg.Workers.ProvideRecursive, pebbleStore, mq, ipfsClient)
-	gcWorker := worker.NewGCWorker(ipfsClient, cfg, shutdownMgr)
-	statWorker := worker.NewStatWorker(ipfsClient, cfg, shutdownMgr)
-	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, cfg, shutdownMgr)
-	queueMonitor := worker.NewQueueMonitor(mq, cfg, shutdownMgr)
-	ttlChecker := worker.NewTTLChecker(pebbleStore, mq, cfg, shutdownMgr)
+	gcWorker := worker.NewGCWorker(cfg.GC.Interval, ipfsClient, shutdownMgr)
+	statWorker := worker.NewStatWorker(ipfsClient, shutdownMgr)
+	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, shutdownMgr)
+	queueMonitor := worker.NewQueueMonitor(mq, shutdownMgr)
+	ttlChecker := worker.NewTTLChecker(cfg.TTLChecker.Interval, cfg.TTLChecker.BatchSize, pebbleStore, mq, shutdownMgr)
 
 	shutdownMgr.Go(func() {
 		pinWorker.Start()

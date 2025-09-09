@@ -2,8 +2,8 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	reqprecheck "github.com/cpucorecore/ipfs_pin_service/internal/req_pre_check"
 	"time"
 
 	"go.uber.org/zap"
@@ -13,7 +13,6 @@ import (
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
-	"github.com/cpucorecore/ipfs_pin_service/internal/util"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
@@ -44,29 +43,17 @@ func NewPinWorker(
 	}
 }
 
-type PinMsg struct {
-	Cid  string `json:"cid"`
-	Size int64  `json:"size"`
-}
-
 func (w *PinWorker) Start() {
 	w.queue.StartPinConsumer(w.handleMsg)
 }
 
 func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
-	pinMsg := &PinMsg{}
-	if err := json.Unmarshal(data, pinMsg); err != nil {
-		log.Log.Error("json.Unmarshal err", zap.String("module", "PinWorker"), zap.String("data", string(data)), zap.Error(err))
-		return err
+	err, cid, size := reqprecheck.CheckJsonReq(data)
+	if err != nil {
+		log.Log.Warn("check pin req msg fail", zap.String("module", "PinWorker"), zap.String("data", string(data)), zap.Error(err))
+		return nil // bad req should not return to mq, just log and ignore
 	}
 
-	if !util.CheckCid(pinMsg.Cid) {
-		log.Log.Warn("check cid fail", zap.String("module", "PinWorker"), zap.String("cid", pinMsg.Cid))
-		return nil
-	}
-
-	cid := pinMsg.Cid
-	size := pinMsg.Size
 	pinRecord, err := w.store.Get(ctx, cid)
 	if err != nil {
 		return w.handlePinError(ctx, cid, err)
@@ -93,18 +80,14 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	log.Log.Info(cid,
-		zap.String("op", opPin),
-		zap.String("step", "start"))
+	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
 	if w.timeout > 0 {
 		timeoutCtx, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
-	log.Log.Info(cid,
-		zap.String("op", opPin),
-		zap.String("step", "ipfs start"))
+	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "ipfs start"))
 
 	startTs := time.Now()
 	err = w.ipfsCli.PinAdd(timeoutCtx, cid)
@@ -115,10 +98,7 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 		return w.handlePinError(ctx, cid, err)
 	}
 
-	log.Log.Info(cid,
-		zap.String("op", opPin),
-		zap.String("step", "ipfs end"),
-		zap.Duration("duration", duration))
+	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "ipfs end"), zap.Duration("duration", duration))
 
 	ttl, bucket := w.ttlPolicy.ComputeTTL(pinRecord.Size)
 	expireTs := endTs.Add(ttl).UnixMilli()
@@ -141,16 +121,10 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 	if err != nil {
 		log.Log.Error("enqueue provide queue err", zap.String("cid", cid), zap.Error(err))
 	} else {
-		log.Log.Info(cid,
-			zap.String("op", opPin),
-			zap.String("step", "enqueue provide queue"))
+		log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "enqueue provide queue"))
 	}
 
-	log.Log.Info(cid,
-		zap.String("op", opPin),
-		zap.String("step", "end"),
-		zap.Int64("size", size),
-		zap.String("bucket", bucket))
+	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "end"), zap.Int64("size", size), zap.String("bucket", bucket))
 	monitor.ObserveFileSize(size)
 	monitor.ObserveTTLBucket(bucket)
 	return nil

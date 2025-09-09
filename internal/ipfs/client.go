@@ -30,12 +30,12 @@ type Client struct {
 
 func NewClientWithConfig(url string, cfg *config.Config) *Client {
 	dialTimeout := 30 * time.Second
-	if cfg != nil && cfg.IPFS.DialTimeout > 0 {
+	if cfg.IPFS.DialTimeout > 0 {
 		dialTimeout = cfg.IPFS.DialTimeout
 	}
 
 	httpTimeout := 30 * time.Second
-	if cfg != nil && cfg.IPFS.HTTPTimeout > 0 {
+	if cfg.IPFS.HTTPTimeout > 0 {
 		httpTimeout = cfg.IPFS.HTTPTimeout
 	}
 

@@ -12,22 +12,22 @@ import (
 )
 
 func TestProvideWorker(t *testing.T) {
-	// 初始化测试日志
+	// Init test logger
 	log.InitLoggerForTest()
 
-	// 创建测试用的 store
+	// Create test store
 	testStore, err := store.NewPebbleStore("test_provide.db")
 	require.NoError(t, err)
 	defer testStore.Close()
 	defer os.RemoveAll("test_provide.db")
 
-	// 创建测试用的 IPFS 客户端 (mock)
+	// Create mock IPFS client
 	ipfsClient := &ipfs.Client{}
 
-	// 创建 provide worker
+	// Create provide worker
 	worker := NewProvideWorker(3, 0, false, testStore, nil, ipfsClient)
 
-	// 测试 worker 创建
+	// Validate worker created
 	assert.NotNil(t, worker)
 	assert.Equal(t, testStore, worker.store)
 	assert.NotNil(t, worker.provideFunc)
@@ -36,11 +36,11 @@ func TestProvideWorker(t *testing.T) {
 }
 
 func TestProvideWorker_MessageFormat(t *testing.T) {
-	// 测试直接使用cid字符串的消息格式
+	// Validate using cid string as message payload
 	testCid := "QmTest123"
 	body := []byte(testCid)
 
-	// 验证消息内容
+	// Verify body
 	assert.Equal(t, testCid, string(body))
 	assert.Equal(t, []byte(testCid), body)
 }
