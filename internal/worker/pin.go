@@ -3,22 +3,22 @@ package worker
 import (
 	"context"
 	"errors"
-	reqprecheck "github.com/cpucorecore/ipfs_pin_service/internal/req_pre_check"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
+	reqprecheck "github.com/cpucorecore/ipfs_pin_service/internal/req_pre_check"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ttl"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 )
 
 type PinWorker struct {
-	maxRetry  int
-	timeout   time.Duration
+	cfg       *config.WorkerConfig
 	store     store.Store
 	queue     mq.Queue
 	ipfsCli   *ipfs.Client
@@ -26,16 +26,14 @@ type PinWorker struct {
 }
 
 func NewPinWorker(
-	maxRetry int,
-	timeout time.Duration,
+	cfg *config.WorkerConfig,
 	store store.Store,
 	queue mq.Queue,
 	ipfsCli *ipfs.Client,
 	ttlPolicy *ttl.Policy,
 ) *PinWorker {
 	return &PinWorker{
-		maxRetry:  maxRetry,
-		timeout:   timeout,
+		cfg:       cfg,
 		store:     store,
 		queue:     queue,
 		ipfsCli:   ipfsCli,
@@ -83,8 +81,8 @@ func (w *PinWorker) handleMsg(ctx context.Context, data []byte) error {
 	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "start"))
 	timeoutCtx := ctx
 	var cancel context.CancelFunc
-	if w.timeout > 0 {
-		timeoutCtx, cancel = context.WithTimeout(ctx, w.timeout)
+	if w.cfg.Timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, w.cfg.Timeout)
 		defer cancel()
 	}
 	log.Log.Info(cid, zap.String("op", opPin), zap.String("step", "ipfs start"))
@@ -144,7 +142,7 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 	err := w.store.Update(ctx, cid, func(r *store.PinRecord) error {
 		r.PinAttemptCount++
 		pinAttemptCount = r.PinAttemptCount
-		if r.PinAttemptCount >= int32(w.maxRetry) {
+		if r.PinAttemptCount >= int32(w.cfg.MaxRetry) {
 			r.Status = store.StatusDeadLetter
 		}
 		return nil
@@ -153,8 +151,8 @@ func (w *PinWorker) handlePinError(ctx context.Context, cid string, pinErr error
 		return err
 	}
 
-	if pinAttemptCount < int32(w.maxRetry) {
-		time.Sleep(time.Millisecond * 300)
+	if pinAttemptCount < int32(w.cfg.MaxRetry) {
+		time.Sleep(w.cfg.RetryInterval)
 		return ErrPinRetry
 	}
 

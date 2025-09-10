@@ -51,28 +51,28 @@ func main() {
 	defer pebbleStore.Close()
 
 	shutdownMgr := shutdown.NewManager()
-	mq, err := mq.NewGoRabbitMQ(cfg)
+	mq, err := mq.NewGoRabbitMQ(cfg.RabbitMQ)
 	if err != nil {
 		log.Log.Sugar().Fatalf("Failed to create queue: %v", err)
 	}
 	defer mq.Close()
 
-	sizeFilter := filter.NewSizeFilter(cfg)
+	sizeFilter := filter.NewSizeFilter(cfg.Filter.SizeLimit.Int64())
 	apiServer := api.NewServer(pebbleStore, mq, sizeFilter, shutdownMgr)
 	ginEngine := gin.Default()
 	apiServer.RegisterHandles(ginEngine)
 	monitor.RegisterHandles(ginEngine)
 
-	policy := ttl.NewPolicy(cfg)
-	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg)
-	pinWorker := worker.NewPinWorker(cfg.Workers.MaxRetries, cfg.Workers.PinTimeout, pebbleStore, mq, ipfsClient, policy)
-	unpinWorker := worker.NewUnpinWorker(cfg.Workers.MaxRetries, cfg.Workers.UnpinTimeout, pebbleStore, mq, ipfsClient)
-	provideWorker := worker.NewProvideWorker(cfg.Workers.MaxRetries, cfg.Workers.ProvideTimeout, cfg.Workers.ProvideRecursive, pebbleStore, mq, ipfsClient)
+	policy := ttl.NewPolicy(cfg.TTL)
+	ipfsClient := ipfs.NewClientWithConfig(cfg.IPFS.APIAddr, cfg.IPFS)
+	pinWorker := worker.NewPinWorker(cfg.PinWorker, pebbleStore, mq, ipfsClient, policy)
+	unpinWorker := worker.NewUnpinWorker(cfg.UnpinWorker, pebbleStore, mq, ipfsClient)
+	provideWorker := worker.NewProvideWorker(cfg.ProvideWorker, cfg.ProvideRecursive, pebbleStore, mq, ipfsClient)
 	gcWorker := worker.NewGCWorker(cfg.GC.Interval, ipfsClient, shutdownMgr)
 	statWorker := worker.NewStatWorker(ipfsClient, shutdownMgr)
 	bitswapStatWorker := worker.NewBitswapStatWorker(ipfsClient, shutdownMgr)
 	queueMonitor := worker.NewQueueMonitor(mq, shutdownMgr)
-	ttlChecker := worker.NewTTLChecker(cfg.TTLChecker.Interval, cfg.TTLChecker.BatchSize, pebbleStore, mq, shutdownMgr)
+	ttlChecker := worker.NewTTLChecker(cfg.TTLChecker, pebbleStore, mq, shutdownMgr)
 
 	shutdownMgr.Go(func() {
 		pinWorker.Start()

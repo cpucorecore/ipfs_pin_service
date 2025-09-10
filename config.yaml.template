@@ -21,15 +21,26 @@ rabbitmq:
   url: "amqp://guest:guest@127.0.0.1:5672/"
   prefetch: 32
 
-workers:
-  pin_concurrency: 8
-  unpin_concurrency: 4
-  provide_concurrency: 2
-  provide_recursive: false  # 是否递归provide目录内容
-  max_retries: 30
-  pin_timeout: "30m"      # 单次pin操作超时（覆盖http_timeout更大场景）
-  unpin_timeout: "5m"     # 单次unpin操作超时
-  provide_timeout: "10m"  # 单次provide操作超时
+# Worker configurations
+provide_recursive: false  # 是否递归provide目录内容
+
+pin_worker:
+  concurrency: 8         # pin worker 并发数
+  timeout: "30m"         # pin 操作超时
+  max_retry: 30          # 最大重试次数
+  retry_interval: "300ms"  # 重试间隔
+
+unpin_worker:
+  concurrency: 4         # unpin worker 并发数
+  timeout: "5m"          # unpin 操作超时
+  max_retry: 30          # 最大重试次数
+  retry_interval: "300ms"  # 重试间隔
+
+provide_worker:
+  concurrency: 2         # provide worker 并发数
+  timeout: "10m"         # provide 操作超时
+  max_retry: 30          # 最大重试次数
+  retry_interval: "300ms"  # 重试间隔
 
 gc:
   interval: "1h"

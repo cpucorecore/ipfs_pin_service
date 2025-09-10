@@ -9,18 +9,19 @@ import (
 )
 
 func TestComputeBuckets(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.TTL.Default = 24 * time.Hour
-	cfg.TTL.Table = []struct {
-		MaxSize config.FileSize `yaml:"max_size"`
-		TTL     time.Duration   `yaml:"ttl"`
-	}{
-		{MaxSize: config.FileSize(1024 * 1024), TTL: 6 * time.Hour}, // 1MiB
-		{MaxSize: config.FileSize(-1), TTL: 24 * time.Hour},         // unlimited
-		{MaxSize: config.FileSize(1024), TTL: 1 * time.Hour},        // 1KiB
+	ttlCfg := &config.TTLConfig{
+		Default: 24 * time.Hour,
+		Table: []struct {
+			MaxSize config.FileSize `yaml:"max_size"`
+			TTL     time.Duration   `yaml:"ttl"`
+		}{
+			{MaxSize: config.FileSize(1024 * 1024), TTL: 6 * time.Hour}, // 1MiB
+			{MaxSize: config.FileSize(-1), TTL: 24 * time.Hour},         // unlimited
+			{MaxSize: config.FileSize(1024), TTL: 1 * time.Hour},        // 1KiB
+		},
 	}
 
-	buckets := computeBuckets(cfg)
+	buckets := computeBuckets(ttlCfg)
 
 	// Verify bucket count
 	if len(buckets) != 3 {
@@ -53,27 +54,29 @@ func TestComputeBuckets(t *testing.T) {
 }
 
 func TestNewPolicy(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.TTL.Default = 24 * time.Hour
-	cfg.TTL.Table = []struct {
-		MaxSize config.FileSize `yaml:"max_size"`
-		TTL     time.Duration   `yaml:"ttl"`
-	}{
-		{MaxSize: config.FileSize(1024), TTL: 1 * time.Hour},        // 1KiB
-		{MaxSize: config.FileSize(1024 * 1024), TTL: 6 * time.Hour}, // 1MiB
-		{MaxSize: config.FileSize(-1), TTL: 24 * time.Hour},         // unlimited
+	ttlCfg := &config.TTLConfig{
+		Default: 24 * time.Hour,
+		Table: []struct {
+			MaxSize config.FileSize `yaml:"max_size"`
+			TTL     time.Duration   `yaml:"ttl"`
+		}{
+			{MaxSize: config.FileSize(1024), TTL: 1 * time.Hour},        // 1KiB
+			{MaxSize: config.FileSize(1024 * 1024), TTL: 6 * time.Hour}, // 1MiB
+			{MaxSize: config.FileSize(-1), TTL: 24 * time.Hour},         // unlimited
+		},
 	}
 
-	policy := NewPolicy(cfg)
+	policy := NewPolicy(ttlCfg)
 
-	// Test that buckets are created with pre-computed labels
-	if len(policy.buckets) != 3 {
-		t.Errorf("Expected 3 buckets, got %d", len(policy.buckets))
+	// Test that buckets are computed correctly
+	buckets := computeBuckets(ttlCfg)
+	if len(buckets) != 3 {
+		t.Errorf("Expected 3 buckets, got %d", len(buckets))
 	}
 
 	// Check that labels are pre-computed
 	expectedLabels := []string{"le_1KiB", "le_1MiB", "gt_max"}
-	for i, bucket := range policy.buckets {
+	for i, bucket := range buckets {
 		if bucket.Label != expectedLabels[i] {
 			t.Errorf("Bucket %d: expected label %s, got %s", i, expectedLabels[i], bucket.Label)
 		}

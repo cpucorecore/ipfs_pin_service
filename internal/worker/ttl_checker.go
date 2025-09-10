@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
@@ -11,17 +12,15 @@ import (
 )
 
 type TTLChecker struct {
-	interval    time.Duration
-	batchSize   int
+	cfg         *config.TTLCheckerConfig
 	store       store.Store
 	queue       mq.Queue
 	shutdownMgr *shutdown.Manager
 }
 
-func NewTTLChecker(interval time.Duration, batchSize int, store store.Store, queue mq.Queue, shutdownMgr *shutdown.Manager) *TTLChecker {
+func NewTTLChecker(cfg *config.TTLCheckerConfig, store store.Store, queue mq.Queue, shutdownMgr *shutdown.Manager) *TTLChecker {
 	return &TTLChecker{
-		interval:    interval,
-		batchSize:   batchSize,
+		cfg:         cfg,
 		store:       store,
 		queue:       queue,
 		shutdownMgr: shutdownMgr,
@@ -29,7 +28,7 @@ func NewTTLChecker(interval time.Duration, batchSize int, store store.Store, que
 }
 
 func (c *TTLChecker) Start(ctx context.Context) error {
-	ticker := time.NewTicker(c.interval)
+	ticker := time.NewTicker(c.cfg.Interval)
 	defer ticker.Stop()
 
 	for {
@@ -51,7 +50,7 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 func (c *TTLChecker) checkTTL(ctx context.Context) error {
 	log.Log.Sugar().Infof("checkTTL start")
 	now := time.Now().UnixMilli()
-	cids, err := c.store.GetExpireCids(ctx, now, c.batchSize)
+	cids, err := c.store.GetExpireCids(ctx, now, c.cfg.BatchSize)
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/monitor"
 )
 
@@ -9,10 +8,9 @@ type SizeFilter struct {
 	sizeLimit int64
 }
 
-func NewSizeFilter(cfg *config.Config) *SizeFilter {
-	f := &SizeFilter{}
-	if cfg != nil {
-		f.sizeLimit = cfg.Filter.SizeLimit.Int64()
+func NewSizeFilter(sizeLimit int64) *SizeFilter {
+	f := &SizeFilter{
+		sizeLimit: sizeLimit,
 	}
 	monitor.SetFilterSizeLimit(f.sizeLimit)
 	return f

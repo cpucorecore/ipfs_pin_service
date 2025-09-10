@@ -10,7 +10,7 @@ import (
 )
 
 type GoRabbitMQ struct {
-	config    *config.Config
+	cfg       *config.RabbitMQConfig
 	amqpCli   *AMQPClient
 	conn      *rabbitmq.Conn
 	pinPC     *PC
@@ -18,11 +18,11 @@ type GoRabbitMQ struct {
 	providePC *PC
 }
 
-func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
-	amqpCli := NewAMQPClient(cfg.RabbitMQ.URL)
+func NewGoRabbitMQ(cfg *config.RabbitMQConfig) (*GoRabbitMQ, error) {
+	amqpCli := NewAMQPClient(cfg.URL)
 
 	conn, err := rabbitmq.NewConn(
-		cfg.RabbitMQ.URL,
+		cfg.URL,
 		rabbitmq.WithConnectionOptionsLogging,
 		rabbitmq.WithConnectionOptionsReconnectInterval(2*time.Second),
 	)
@@ -35,7 +35,7 @@ func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
 		Queue:        PinQueue,
 		RoutingKey:   PinRoutingKey,
 		Exchange:     PinExchange,
-		Concurrency:  cfg.Workers.PinConcurrency,
+		Concurrency:  cfg.PinConcurrency,
 	})
 
 	unpinPC := NewPC(conn, &PCConfig{
@@ -43,7 +43,7 @@ func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
 		Queue:        UnpinQueue,
 		RoutingKey:   UnpinRoutingKey,
 		Exchange:     UnpinExchange,
-		Concurrency:  cfg.Workers.UnpinConcurrency,
+		Concurrency:  cfg.UnpinConcurrency,
 	})
 
 	providePC := NewPC(conn, &PCConfig{
@@ -51,11 +51,11 @@ func NewGoRabbitMQ(cfg *config.Config) (*GoRabbitMQ, error) {
 		Queue:        ProvideQueue,
 		RoutingKey:   ProvideRoutingKey,
 		Exchange:     ProvideExchange,
-		Concurrency:  cfg.Workers.ProvideConcurrency,
+		Concurrency:  cfg.PinConcurrency,
 	})
 
 	return &GoRabbitMQ{
-		config:    cfg,
+		cfg:       cfg,
 		amqpCli:   amqpCli,
 		conn:      conn,
 		pinPC:     pinPC,

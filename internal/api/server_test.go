@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/filter"
 	"github.com/cpucorecore/ipfs_pin_service/internal/mq"
 	"github.com/cpucorecore/ipfs_pin_service/internal/shutdown"
@@ -94,9 +93,7 @@ func TestHandlePutPin_Filtered(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	fs := &fakeStore{}
 	mq := &fakeMQ{}
-	cfg := &config.Config{}
-	cfg.Filter.SizeLimit = config.FileSize(1) // sizes >1 will be filtered
-	f := filter.NewSizeFilter(cfg)
+	f := filter.NewSizeFilter(1) // sizes >1 will be filtered
 	shutdownMgr := shutdown.NewManager()
 	s := NewServer(fs, mq, f, shutdownMgr)
 	r := gin.Default()
@@ -112,7 +109,7 @@ func TestHandlePutPin_Filtered(t *testing.T) {
 	if rec == nil || rec.Status != store.StatusFiltered {
 		t.Fatalf("expected record filtered")
 	}
-	if rec.SizeLimit != int64(cfg.Filter.SizeLimit) {
+	if rec.SizeLimit != 1 {
 		t.Fatalf("expected size limit recorded")
 	}
 }

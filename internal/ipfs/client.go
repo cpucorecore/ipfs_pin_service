@@ -25,18 +25,19 @@ type RepoStat struct {
 }
 
 type Client struct {
+	cfg     *config.IPFSConfig
 	ipfsCli *rpc.HttpApi
 }
 
-func NewClientWithConfig(url string, cfg *config.Config) *Client {
+func NewClientWithConfig(url string, cfg *config.IPFSConfig) *Client {
 	dialTimeout := 30 * time.Second
-	if cfg.IPFS.DialTimeout > 0 {
-		dialTimeout = cfg.IPFS.DialTimeout
+	if cfg.DialTimeout > 0 {
+		dialTimeout = cfg.DialTimeout
 	}
 
 	httpTimeout := 30 * time.Second
-	if cfg.IPFS.HTTPTimeout > 0 {
-		httpTimeout = cfg.IPFS.HTTPTimeout
+	if cfg.HTTPTimeout > 0 {
+		httpTimeout = cfg.HTTPTimeout
 	}
 
 	httpClient := &http.Client{
@@ -63,7 +64,10 @@ func NewClientWithConfig(url string, cfg *config.Config) *Client {
 	}
 
 	ipfsCli.Request("")
-	return &Client{ipfsCli: ipfsCli}
+	return &Client{
+		cfg:     cfg,
+		ipfsCli: ipfsCli,
+	}
 }
 
 func getCidPath(cidStr string) ipfspath.Path {

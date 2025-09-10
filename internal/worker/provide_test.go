@@ -25,7 +25,7 @@ func TestProvideWorker(t *testing.T) {
 	ipfsClient := &ipfs.Client{}
 
 	// Create provide worker
-	worker := NewProvideWorker(3, 0, false, testStore, nil, ipfsClient)
+	worker := NewProvideWorker(3, 0, 0, false, testStore, nil, ipfsClient)
 
 	// Validate worker created
 	assert.NotNil(t, worker)

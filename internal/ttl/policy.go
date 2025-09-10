@@ -19,10 +19,10 @@ type Policy struct {
 	buckets    []Bucket
 }
 
-func computeBuckets(cfg *config.Config) []Bucket {
-	buckets := make([]Bucket, len(cfg.TTL.Table))
+func computeBuckets(cfg *config.TTLConfig) []Bucket {
+	buckets := make([]Bucket, len(cfg.Table))
 
-	for i, entry := range cfg.TTL.Table {
+	for i, entry := range cfg.Table {
 		maxSize := entry.MaxSize.Int64()
 		if maxSize == -1 {
 			maxSize = math.MaxInt64
@@ -43,9 +43,9 @@ func computeBuckets(cfg *config.Config) []Bucket {
 	return buckets
 }
 
-func NewPolicy(cfg *config.Config) *Policy {
+func NewPolicy(cfg *config.TTLConfig) *Policy {
 	return &Policy{
-		defaultTTL: cfg.TTL.Default,
+		defaultTTL: cfg.Default,
 		buckets:    computeBuckets(cfg),
 	}
 }
