@@ -1,62 +1,60 @@
 log:
-  level: "info"           # debug, info, warn, error
-  async: true              # true: buffered output
-  buffer_size: 65536       # bytes
-  flush_interval: "1s"     # seconds
+  level: "info"
+  async: true
+  buffer_size: 1MB
+  flush_interval: 1s
 
 http:
   port: 8081
 
 ipfs:
   api_addr: "http://127.0.0.1:5001"
-  http_timeout: "30m"     # 单个HTTP请求超时
-  dial_timeout: "60s"     # 建连超时
-
-# 请求过滤配置：当客户端声明的 size 超过 size_limit 时将被过滤
-# 0 或未配置表示不过滤；支持人类可读格式："100K", "5M", "1.5G", 也支持 KB/MB/GiB 等
-filter:
-  size_limit: 0            # 如 104857600, "100M", "500KiB"
+  http_timeout: 30m
+  dial_timeout: 60s
 
 rabbitmq:
-  url: "amqp://guest:guest@127.0.0.1:5672/"
-  prefetch: 32
-
-# Worker configurations
-provide_recursive: false  # 是否递归provide目录内容
-
-pin_worker:
-  concurrency: 8         # pin worker 并发数
-  timeout: "30m"         # pin 操作超时
-  max_retry: 30          # 最大重试次数
-  retry_interval: "300ms"  # 重试间隔
-
-unpin_worker:
-  concurrency: 4         # unpin worker 并发数
-  timeout: "5m"          # unpin 操作超时
-  max_retry: 30          # 最大重试次数
-  retry_interval: "300ms"  # 重试间隔
-
-provide_worker:
-  concurrency: 2         # provide worker 并发数
-  timeout: "10m"         # provide 操作超时
-  max_retry: 30          # 最大重试次数
-  retry_interval: "300ms"  # 重试间隔
+  url: "amqp://guest:guest@localhost:5672/"
+  pin_concurrency: 16
+  unpin_concurrency: 32
+  provide_concurrency: 16
 
 gc:
-  interval: "1h"
+  interval: 6h
 
 ttl_checker:
-  interval: "1m"
-  batch_size: 100
+  interval: 1m
+  batch_size: 1000
 
 ttl:
-  default: "1h"
+  default: 24h
   table:
-    - max_size: "500K"
-      ttl: "60m"
+    - max_size: "200K"
+      ttl: "168h"
+    - max_size: "1M"
+      ttl: "48h"
     - max_size: "10M"
-      ttl: "45m"
+      ttl: "24h"
     - max_size: "100M"
-      ttl: "30m"
+      ttl: "12h"
     - max_size: "-1"
-      ttl: "15m"
+      ttl: "4h"
+
+filter:
+  size_limit: 200MB
+
+provide_recursive: false
+
+pin_worker:
+  timeout: 1h
+  max_retry: 30
+  retry_interval: 1s
+
+unpin_worker:
+  timeout: 10m
+  max_retry: 30
+  retry_interval: 1s
+
+provide_worker:
+  timeout: 10m
+  max_retry: 30
+  retry_interval: 1s

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"log"
 	"os"
 	"time"
 
@@ -26,10 +28,9 @@ type IPFSConfig struct {
 
 type RabbitMQConfig struct {
 	URL                string `yaml:"url"`
-	Prefetch           int    `yaml:"prefetch"`
 	PinConcurrency     int    `yaml:"pin_concurrency"`
 	UnpinConcurrency   int    `yaml:"unpin_concurrency"`
-	ProvideConcurrency bool   `yaml:"provide_concurrency"`
+	ProvideConcurrency int    `yaml:"provide_concurrency"`
 }
 
 type WorkerConfig struct {
@@ -84,6 +85,9 @@ func Load(name string) (*Config, error) {
 	if err = yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+
+	data, _ = json.MarshalIndent(cfg, "", "  ")
+	log.Printf("Loaded config:\n%s", string(data))
 
 	return cfg, nil
 }

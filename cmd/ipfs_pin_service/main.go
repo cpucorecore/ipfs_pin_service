@@ -74,43 +74,43 @@ func main() {
 	queueMonitor := worker.NewQueueMonitor(mq, shutdownMgr)
 	ttlChecker := worker.NewTTLChecker(cfg.TTLChecker, pebbleStore, mq, shutdownMgr)
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("pinWorker", func() {
 		pinWorker.Start()
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("unpinWorker", func() {
 		unpinWorker.Start()
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("provideWorker", func() {
 		provideWorker.Start()
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("gcWorker", func() {
 		if err = gcWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("GC worker stopped: %v", err)
 		}
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("ttlChecker", func() {
 		if err = ttlChecker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("TTL checker stopped: %v", err)
 		}
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("statWorker", func() {
 		if err = statWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Stat worker stopped: %v", err)
 		}
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("bitswapStatWorker", func() {
 		if err = bitswapStatWorker.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Bitswap stat worker stopped: %v", err)
 		}
 	})
 
-	shutdownMgr.Go(func() {
+	shutdownMgr.Go("queueMonitor", func() {
 		if err = queueMonitor.Start(shutdownMgr.ShutdownCtx()); err != nil {
 			log.Log.Sugar().Errorf("Queue monitor stopped: %v", err)
 		}

@@ -51,7 +51,7 @@ func NewGoRabbitMQ(cfg *config.RabbitMQConfig) (*GoRabbitMQ, error) {
 		Queue:        ProvideQueue,
 		RoutingKey:   ProvideRoutingKey,
 		Exchange:     ProvideExchange,
-		Concurrency:  cfg.PinConcurrency,
+		Concurrency:  cfg.ProvideConcurrency,
 	})
 
 	return &GoRabbitMQ{

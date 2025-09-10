@@ -91,12 +91,12 @@ func (m *Manager) Wait() {
 	m.wg.Wait()
 }
 
-func (m *Manager) Go(fn func()) {
+func (m *Manager) Go(id string, fn func()) {
 	m.wg.Add(1)
-	log.Log.Sugar().Info("WaitGroup: added 1, starting goroutine")
+	log.Log.Sugar().Infof("WaitGroup: added 1, %s", id)
 	go func() {
 		defer func() {
-			log.Log.Sugar().Info("WaitGroup: goroutine completed, calling Done")
+			log.Log.Sugar().Infof("WaitGroup: %s finished", id)
 			m.wg.Done()
 		}()
 		fn()
