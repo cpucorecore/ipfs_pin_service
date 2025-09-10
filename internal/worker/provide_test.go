@@ -1,14 +1,15 @@
 package worker
 
 import (
-	"os"
-	"testing"
-
+	"github.com/cpucorecore/ipfs_pin_service/internal/config"
 	"github.com/cpucorecore/ipfs_pin_service/internal/ipfs"
 	"github.com/cpucorecore/ipfs_pin_service/internal/store"
 	"github.com/cpucorecore/ipfs_pin_service/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"testing"
+	"time"
 )
 
 func TestProvideWorker(t *testing.T) {
@@ -25,13 +26,17 @@ func TestProvideWorker(t *testing.T) {
 	ipfsClient := &ipfs.Client{}
 
 	// Create provide worker
-	worker := NewProvideWorker(3, 0, 0, false, testStore, nil, ipfsClient)
+	timeout := time.Second * 10
+	retryInterval := time.Second * 1
+	worker := NewProvideWorker(&config.WorkerConfig{Timeout: timeout, MaxRetry: 2, RetryInterval: retryInterval}, false, testStore, nil, ipfsClient)
 
 	// Validate worker created
 	assert.NotNil(t, worker)
 	assert.Equal(t, testStore, worker.store)
 	assert.NotNil(t, worker.provideFunc)
-	assert.Equal(t, 3, worker.maxRetry)
+	assert.Equal(t, timeout, worker.cfg.Timeout)
+	assert.Equal(t, 2, worker.cfg.MaxRetry)
+	assert.Equal(t, retryInterval, worker.cfg.RetryInterval)
 	assert.Equal(t, "provide", worker.opType)
 }
 
