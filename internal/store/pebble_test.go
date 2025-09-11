@@ -108,12 +108,12 @@ func TestAddExpireIndex(t *testing.T) {
 	}
 
 	// Verify the index was added by querying it
-	cids, err := s.GetExpireCids(ctx, expireAt+1000, 10)
+	expires, err := s.GetExpires(ctx, expireAt+1000, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if len(cids) != 1 || cids[0] != cid {
-		t.Fatalf("expected to find cid %s, got %v", cid, cids)
+	if len(expires) != 1 || expires[0].Cid != cid {
+		t.Fatalf("expected to find cid %s, got %v", cid, expires)
 	}
 }
 
@@ -131,12 +131,12 @@ func TestDeleteExpireIndex(t *testing.T) {
 	}
 
 	// Verify it was added
-	cids, err := s.GetExpireCids(ctx, expireAt+1000, 10)
+	expires, err := s.GetExpires(ctx, expireAt+1000, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error after add: %v", err)
 	}
-	if len(cids) != 1 || cids[0] != cid {
-		t.Fatalf("expected to find cid %s after add, got %v", cid, cids)
+	if len(expires) != 1 || expires[0].Cid != cid {
+		t.Fatalf("expected to find cid %s after add, got %v", cid, expires)
 	}
 
 	// Now delete the expire index
@@ -146,12 +146,12 @@ func TestDeleteExpireIndex(t *testing.T) {
 	}
 
 	// Verify it was deleted
-	cids, err = s.GetExpireCids(ctx, expireAt+1000, 10)
+	expires, err = s.GetExpires(ctx, expireAt+1000, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error after delete: %v", err)
 	}
-	if len(cids) != 0 {
-		t.Fatalf("expected no cids after delete, got %v", cids)
+	if len(expires) != 0 {
+		t.Fatalf("expected no cids after delete, got %v", expires)
 	}
 }
 
@@ -177,29 +177,29 @@ func TestIndexByExpireBefore(t *testing.T) {
 		}
 	}
 
-	cids, err := s.GetExpireCids(ctx, 150, 10)
+	expires, err := s.GetExpires(ctx, 150, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if len(cids) != 1 || cids[0] != "x1" {
-		t.Fatalf("unexpected result: %v", cids)
+	if len(expires) != 1 || expires[0].Cid != "x1" {
+		t.Fatalf("unexpected result: %v", expires)
 	}
 
-	cids, err = s.GetExpireCids(ctx, 300, 10)
+	expires, err = s.GetExpires(ctx, 300, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if len(cids) != 2 || cids[0] != "x1" || cids[1] != "x2" {
-		t.Fatalf("unexpected result: %v", cids)
+	if len(expires) != 2 || expires[0].Cid != "x1" || expires[1].Cid != "x2" {
+		t.Fatalf("unexpected result: %v", expires)
 	}
 
 	// limit should restrict count
-	cids, err = s.GetExpireCids(ctx, 300, 1)
+	expires, err = s.GetExpires(ctx, 300, 1)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if len(cids) != 1 {
-		t.Fatalf("unexpected limited result: %v", cids)
+	if len(expires) != 1 {
+		t.Fatalf("unexpected limited result: %v", expires)
 	}
 }
 
@@ -225,12 +225,12 @@ func TestGetExpireCidsEmpty(t *testing.T) {
 	ctx := context.Background()
 
 	// Test querying empty store
-	cids, err := s.GetExpireCids(ctx, 1000, 10)
+	expires, err := s.GetExpires(ctx, 1000, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
-	if len(cids) != 0 {
-		t.Fatalf("expected empty result, got %v", cids)
+	if len(expires) != 0 {
+		t.Fatalf("expected empty result, got %v", expires)
 	}
 }
 
@@ -249,7 +249,7 @@ func TestGetExpireCidsLimit(t *testing.T) {
 	}
 
 	// Test limit
-	cids, err := s.GetExpireCids(ctx, 2000, 3)
+	cids, err := s.GetExpires(ctx, 2000, 3)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestGetExpireCidsOrderingAndLimit(t *testing.T) {
 	}
 
 	// Without tight upper bound to include all
-	got, err := s.GetExpireCids(ctx, 9000, 10)
+	got, err := s.GetExpires(ctx, 9000, 10)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
@@ -292,18 +292,18 @@ func TestGetExpireCidsOrderingAndLimit(t *testing.T) {
 		t.Fatalf("unexpected count: got %d want %d (%v)", len(got), len(expected), got)
 	}
 	for i := range expected {
-		if got[i] != expected[i] {
+		if got[i].Cid != expected[i] {
 			t.Fatalf("expire order mismatch at %d: got %v want %v", i, got, expected)
 		}
 	}
 
 	// Limit should respect the same ordering
-	got, err = s.GetExpireCids(ctx, 9000, 2)
+	expires, err := s.GetExpires(ctx, 9000, 2)
 	if err != nil {
 		t.Fatalf("GetExpireCids error: %v", err)
 	}
 	expectedLimited := []string{"c-a", "c-z"}
-	if len(got) != len(expectedLimited) || got[0] != expectedLimited[0] || got[1] != expectedLimited[1] {
+	if len(expires) != len(expectedLimited) || expires[0].Cid != expectedLimited[0] || expires[1].Cid != expectedLimited[1] {
 		t.Fatalf("unexpected limited order: got %v want %v", got, expectedLimited)
 	}
 }

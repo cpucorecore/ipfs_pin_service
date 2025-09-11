@@ -84,23 +84,30 @@ func (s *PebbleStore) DeleteExpireIndex(ctx context.Context, cid string, expireA
 	return s.db.Delete(expireKey, pebble.Sync)
 }
 
-func (s *PebbleStore) GetExpireCids(ctx context.Context, timestamp int64, limit int) ([]string, error) {
+func (s *PebbleStore) DeleteExpireIndexByKey(ctx context.Context, key []byte) error {
+	return s.db.Delete(key, pebble.Sync)
+}
+
+func (s *PebbleStore) GetExpires(ctx context.Context, timestamp int64, limit int) ([]*Expire, error) {
 	iter, _ := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: ExpireStartKey,
 		UpperBound: makeExpireEndKey(timestamp),
 	})
 	defer iter.Close()
 
-	var cids []string
-	for iter.First(); iter.Valid() && len(cids) < limit; iter.Next() {
+	expires := make([]*Expire, 0, limit)
+	for iter.First(); iter.Valid() && len(expires) < limit; iter.Next() {
 		key := iter.Key()
 		_, cid, err := parseExpireKey(key)
 		if err != nil {
 			return nil, err
 		}
-		cids = append(cids, cid)
+		expires = append(expires, &Expire{
+			Key: key,
+			Cid: cid,
+		})
 	}
-	return cids, iter.Error()
+	return expires, iter.Error()
 }
 
 func (s *PebbleStore) Close() error {

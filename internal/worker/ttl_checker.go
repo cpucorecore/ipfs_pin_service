@@ -50,53 +50,53 @@ func (c *TTLChecker) Start(ctx context.Context) error {
 func (c *TTLChecker) checkTTL(ctx context.Context) error {
 	log.Log.Sugar().Infof("checkTTL start")
 	now := time.Now().UnixMilli()
-	cids, err := c.store.GetExpireCids(ctx, now, c.cfg.BatchSize)
+	expires, err := c.store.GetExpires(ctx, now, c.cfg.BatchSize)
 	if err != nil {
 		return err
 	}
-	log.Log.Sugar().Infof("checkTTL success with %d cids", len(cids))
+	log.Log.Sugar().Infof("checkTTL success with %d expires", len(expires))
 
-	if len(cids) == 0 {
+	if len(expires) == 0 {
 		return nil
 	}
 
-	return c.publishUnpinCids(ctx, cids)
+	return c.publishUnpinCids(ctx, expires)
 }
 
-func (c *TTLChecker) publishUnpinCids(ctx context.Context, cids []string) error {
-	log.Log.Sugar().Debugf("publishUnpinCids start with %d cids", len(cids))
-	for _, cid := range cids {
-		pinRecord, err := c.store.Get(ctx, cid)
+func (c *TTLChecker) publishUnpinCids(ctx context.Context, expires []*store.Expire) error {
+	log.Log.Sugar().Debugf("publishUnpinCids start with %d cids", len(expires))
+	for _, expire := range expires {
+		pinRecord, err := c.store.Get(ctx, expire.Cid)
 		if err != nil {
-			log.Log.Sugar().Errorf("store.Get(%s) err: %v", cid, err)
+			log.Log.Sugar().Errorf("store.Get(%s) err: %v", expire.Cid, err)
 			continue
 		}
 
 		if pinRecord == nil {
-			log.Log.Sugar().Warnf("store.Get(%s) nil", cid)
+			log.Log.Sugar().Warnf("store.Get(%s) nil", expire.Cid)
 			continue
 		}
 
-		log.Log.Sugar().Infof("unpin[%s] with status[%d], expireAt[%d]", cid, pinRecord.Status, pinRecord.ExpireAt)
+		log.Log.Sugar().Infof("unpin[%s] with status[%d], expireAt[%d]", expire.Cid, pinRecord.Status, pinRecord.ExpireAt)
 
-		err = c.queue.EnqueueUnpin([]byte(cid))
+		err = c.queue.EnqueueUnpin([]byte(expire.Cid))
 		if err != nil {
-			log.Log.Sugar().Errorf("queue.Enqueue(%s) err: %v", cid, err)
+			log.Log.Sugar().Errorf("queue.Enqueue(%s) err: %v", expire.Cid, err)
 			continue
 		}
 
-		err = c.store.Update(ctx, cid, func(r *store.PinRecord) error {
+		err = c.store.Update(ctx, expire.Cid, func(r *store.PinRecord) error {
 			r.Status = store.StatusScheduledForUnpin
 			r.ScheduleUnpinAt = time.Now().UnixMilli()
 			return nil
 		})
 		if err != nil {
-			log.Log.Sugar().Errorf("update cid[%s] status[%d]: %v", cid, store.StatusScheduledForUnpin, err)
+			log.Log.Sugar().Errorf("update cid[%s] status[%d]: %v", expire.Cid, store.StatusScheduledForUnpin, err)
 			continue
 		}
 
-		if err = c.store.DeleteExpireIndex(ctx, cid, pinRecord.ExpireAt); err != nil {
-			log.Log.Sugar().Errorf("remove expire index for cid[%s] failed: %v", cid, err)
+		if err = c.store.DeleteExpireIndexByKey(ctx, expire.Key); err != nil {
+			log.Log.Sugar().Errorf("remove expire index for cid[%s] failed: %v", expire.Cid, err)
 		}
 	}
 	return nil

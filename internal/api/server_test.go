@@ -45,7 +45,10 @@ func (f *fakeStore) AddExpireIndex(ctx context.Context, cid string, expireAt int
 func (f *fakeStore) DeleteExpireIndex(ctx context.Context, cid string, expireAt int64) error {
 	return nil
 }
-func (f *fakeStore) GetExpireCids(ctx context.Context, ts int64, limit int) ([]string, error) {
+func (f *fakeStore) DeleteExpireIndexByKey(ctx context.Context, key []byte) error {
+	return nil
+}
+func (f *fakeStore) GetExpires(ctx context.Context, ts int64, limit int) ([]*store.Expire, error) {
 	return nil, nil
 }
 func (f *fakeStore) GetExpireIndex(ctx context.Context, cid string) (string, error) {
