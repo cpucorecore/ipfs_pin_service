@@ -97,7 +97,8 @@ func (s *PebbleStore) GetExpires(ctx context.Context, timestamp int64, limit int
 
 	expires := make([]*Expire, 0, limit)
 	for iter.First(); iter.Valid() && len(expires) < limit; iter.Next() {
-		key := iter.Key()
+		key := make([]byte, len(iter.Key()))
+		copy(key, iter.Key())
 		_, cid, err := parseExpireKey(key)
 		if err != nil {
 			return nil, err

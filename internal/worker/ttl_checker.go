@@ -65,6 +65,9 @@ func (c *TTLChecker) checkTTL(ctx context.Context) error {
 
 func (c *TTLChecker) publishUnpinCids(ctx context.Context, expires []*store.Expire) error {
 	log.Log.Sugar().Debugf("publishUnpinCids start with %d cids", len(expires))
+	for i, expire := range expires {
+		log.Log.Sugar().Debugf("%d:%s", i, expire.Key)
+	}
 	for _, expire := range expires {
 		pinRecord, err := c.store.Get(ctx, expire.Cid)
 		if err != nil {
