@@ -10,12 +10,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	CacheSize = 256 << 20
+)
+
 type PebbleStore struct {
-	db *pebble.DB
+	cache *pebble.Cache
+	db    *pebble.DB
 }
 
 func NewPebbleStore(path string) (*PebbleStore, error) {
-	db, err := pebble.Open(path, &pebble.Options{})
+	cache := pebble.NewCache(CacheSize)
+	db, err := pebble.Open(path, &pebble.Options{Cache: cache})
 	if err != nil {
 		return nil, err
 	}
@@ -111,5 +117,11 @@ func (s *PebbleStore) GetExpires(ctx context.Context, timestamp int64, limit int
 }
 
 func (s *PebbleStore) Close() error {
+	err := s.db.Flush()
+	for err != nil {
+		err = s.db.Flush()
+		time.Sleep(time.Millisecond * 100)
+	}
+
 	return s.db.Close()
 }
